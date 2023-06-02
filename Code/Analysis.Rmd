@@ -1,0 +1,227 @@
+---
+title: "Prediction model for permanent hypoparathyroidism"
+author: "Carolien C.H.M. Maas, Erasmus MC, Rotterdam, The Netherlands"
+date: "June 2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Load packages, functions, and data
+```{r, eval=TRUE, echo=TRUE, message=FALSE, warning=FALSE}
+# erase memory
+rm(list = ls(all.names = TRUE))
+
+# for reproducibility
+set.seed(100)
+
+# load libraries
+library(haven)
+library(dplyr)
+library(mice)
+library(rms)
+set.seed(1)
+```
+
+# Load data
+```{r, eval=TRUE, echo=TRUE, message=FALSE, warning=FALSE}
+file.path <- "Z:/Project Hypoparathyroidism/"
+original.data <- read.csv(paste0(file.path, "Data/Data.csv"), 
+                 stringsAsFactors=TRUE,
+                 header = T, sep = ";", dec = ".", 
+                 na.strings = c("", " ", "NA", "999", 999, "999.00", 999.00, 
+                                "Missing", "missing"))
+
+# variable selection
+cvar <- c("Record_ID", "Center","Readmission","HypoP", "surgery_type", "Sex", "Indicatie",
+          "BSKgezien",  "CHKD", "BSKinPA", "PostPA", "PostOPCa", "Validatie", "Validatie1")
+nvar <- c("BaselinePTH", "PTH24u", "BaseCa", "Basealbu", "Ca24u", "Albu24u",
+           "Age_Years")
+work.data <- original.data[c(cvar, nvar)]
+```
+
+# Data cleaning
+```{r, eval=TRUE}
+# coding of variables
+work.data$HypoP <- ifelse(work.data$HypoP %in% c("No ", "No"), "No", "Yes")
+work.data$HypoP <- as.factor(work.data$HypoP)
+work.data$PostOPCa <- ifelse(work.data$PostOPCa %in% c("No ", "No"), "No", "Yes")
+work.data$PostOPCa <- as.factor(work.data$PostOPCa)
+work.data$Age_Years <- as.numeric(work.data$Age_Years)
+
+# replace , by .
+work.data$BaselinePTH <- gsub(",", ".", work.data$BaselinePTH)
+work.data$BaselinePTH <- as.numeric(work.data$BaselinePTH)
+work.data$PTH24u <- gsub(",", ".", work.data$PTH24u)
+work.data$PTH24u <- as.numeric(work.data$PTH24u)
+work.data$BaseCa <- gsub(",", ".", work.data$BaseCa)
+work.data$BaseCa <- as.numeric(work.data$BaseCa)
+work.data$Basealbu <- gsub(",", ".", work.data$Basealbu)
+work.data$Basealbu <- as.numeric(work.data$Basealbu)
+work.data$Ca24u <- gsub(",", ".", work.data$Ca24u)
+work.data$Ca24u <- as.numeric(work.data$Ca24u)
+work.data$Albu24u <- gsub(",", ".", work.data$Albu24u)
+work.data$Albu24u <- as.numeric(work.data$Albu24u)
+```
+
+# Imputation
+```{r, eval=TRUE}
+# DISCUSS with David: missings max 10%, single imputation is ok?
+summary(work.data)
+sum(is.na(work.data$BSKgezien))/nrow(work.data)*100
+sum(is.na(work.data$CHKD))/nrow(work.data)*100
+sum(is.na(work.data$BSKinPA))/nrow(work.data)*100
+sum(is.na(work.data$PostPA))/nrow(work.data)*100
+sum(is.na(work.data$BaselinePTH))/nrow(work.data)*100
+sum(is.na(work.data$PTH24u))/nrow(work.data)*100
+sum(is.na(work.data$BaseCa))/nrow(work.data)*100
+sum(is.na(work.data$Basealbu))/nrow(work.data)*100
+sum(is.na(work.data$Ca24u))/nrow(work.data)*100
+sum(is.na(work.data$Albu24u))/nrow(work.data)*100
+
+# set-up imputation
+miceHypoP <- mice(work.data, maxit = 0)
+miceHypoPmeth <- miceHypoP$meth
+miceHypoPpred <- miceHypoP$pred
+miceHypoP
+
+## will not be used as predictor in model
+miceHypoPpred[, "Record_ID"] <- 0
+
+# DISCUSS: why don't you want to use this in imputation model?
+# miceHypoPpred[, "Validatie"] <- 0
+# miceHypoPpred[, "Validatie1"] <- 0
+# miceHypoPpred[, "Indicatie"] <- 0 # DISCUSS: waarom imputeren we Indicatie "Unknown" niet?
+# miceHypoPpred[, "PostOPCa"] <- 0
+
+# single imputation
+m <- 1
+mi <- mice::mice(work.data, m = m, seed = 1,
+           method=miceHypoPmeth,
+           predictorMatrix=miceHypoPpred,
+           print=FALSE) 
+# DISCUSS: why vis="monotone", maxit = 50 (5 is enough?)?
+```
+
+# Berekenen PTH daling, gecorrigeerd calcium en gecorrigeerd calcium daling
+```{r, eval=TRUE}
+mi_long <- complete(mi, action = "long", include = T)
+mi_long$dPTH <- ((mi_long$BaselinePTH - mi_long$PTH24u)/mi_long$BaselinePTH*100)
+mi_long$CorrCaBaseline <- mi_long$BaseCa +((34-mi_long$Basealbu)*0.016)
+mi_long$CorrCa24u <- mi_long$Ca24u +((34-mi_long$Albu24u)*0.016)
+mi_long$dCorrCa24u <- ((mi_long$CorrCaBaseline - mi_long$CorrCa24u)/mi_long$CorrCaBaseline*100)
+mi_long$dCa24u <- ((mi_long$BaseCa - mi_long$Ca24u)/mi_long$BaseCa*100)
+mi_long$BSKnietgezien <- ifelse(mi_long$BSKgezien=="Yes", "No", ifelse(mi_long$BSKgezien=="No", "Yes", NA))
+mi_long$BSKnietgezien <- as.factor(mi_long$BSKnietgezien)
+imputed.data <- as.mids(mi_long)
+
+# set data distributions
+# DISCUSS David: dPTH voor of na imputatie definiëren, nodig voor plot(Predict)
+dd<-rms::datadist(complete(imputed.data, m))
+options(datadist='dd')
+options(digits=8)
+```
+
+# Functional form of logistic regression
+```{r, eval=TRUE}
+# DISCUSS: rather do this based on clinical expertise
+# all possible predictors
+# include either PTH24u or dPTH
+# include either Ca24u or CorrCa24u or dCa24u or dCorrCa24u
+functional.forms <- list(
+  "PTH24u + Ca24u",
+  "PTH24u + CorrCa24u",
+  "PTH24u + dCa24u",
+  "PTH24u + dCorrCa24u",
+  "dPTH + Ca24u",
+  "dPTH + CorrCa24u", # BEST
+  "dPTH + dCa24u",
+  "dPTH + dCorrCa24u")
+model.AICs <- c()
+for (functional.form in functional.forms){
+  form <- eval(parse(text=paste("HypoP ~", functional.form, "+ Age_Years + Sex + Indicatie + surgery_type + BSKgezien + CHKD")))
+  model <- glm(form, data=complete(imputed.data, m), family="binomial")
+  model.AICs <- c(model.AICs, model$aic)
+}
+print(cbind(functional.forms, model.AICs))
+```
+# Functional form of covariates
+```{r, eval=TRUE}
+# plot most flexible model
+form.full.model <- HypoP ~ rcs(dPTH) + 
+  rcs(CorrCa24u) + 
+  rcs(Age_Years) + 
+  Sex + 
+  Indicatie + 
+  surgery_type + 
+  BSKgezien + 
+  CHKD
+full.model <- rms::lrm(form.full.model, data=complete(imputed.data, m))
+plot(Predict(full.model))
+
+# check if dPTH, CorrCa14u or age need to be modelled non-linearly
+functional.forms <- list(
+  "rcs(dPTH) + CorrCa24u + Age_Years",
+  "dPTH + rcs(CorrCa24u) + Age_Years",
+  "dPTH + CorrCa24u + rcs(Age_Years)", # BEST
+  "rcs(dPTH) + rcs(CorrCa24u) + Age_Years",
+  "rcs(dPTH) + CorrCa24u + rcs(Age_Years)",
+  "dPTH + rcs(CorrCa24u) + rcs(Age_Years)",
+  "rcs(dPTH) + rcs(CorrCa24u) + rcs(Age_Years)",
+  "dPTH + CorrCa24u + Age_Years + Age_Years^2")
+model.AICs <- c()
+for (functional.form in functional.forms){
+  form <- eval(parse(text=paste("HypoP ~", functional.form, "+ Sex + Indicatie + surgery_type + BSKgezien + CHKD")))
+  model <- glm(form, data=complete(imputed.data, m), family="binomial")
+  model.AICs <- c(model.AICs, model$aic)
+}
+print(cbind(functional.forms, model.AICs))
+
+# check what best model looks like
+form.full.model <- HypoP ~ dPTH + 
+  CorrCa24u + 
+  Age_Years + 
+  Age_Years^2 + 
+  Sex + 
+  Indicatie + 
+  surgery_type + 
+  BSKgezien + 
+  CHKD
+full.model <- rms::lrm(form.full.model, data=complete(imputed.data, m))
+plot(Predict(full.model))
+```
+# Full model
+```{r, eval=TRUE}
+form.full.model <- HypoP ~ dPTH + 
+  CorrCa24u + 
+  Age_Years + 
+  Sex + 
+  Indicatie + 
+  surgery_type + 
+  BSKgezien + 
+  CHKD
+full.model <- glm(form.full.model, data=complete(imputed.data, m), family="binomial")
+an <- stats::anova(full.model)
+summary(full.model)
+```
+# Backward selection
+```{r, eval=TRUE}
+form.final.model <- HypoP ~ dPTH + 
+  CorrCa24u + 
+  # Age_Years + 
+  # Sex + 
+  # Indicatie + 
+  # surgery_type + 
+  BSKgezien
+  # CHKD
+final.model <- glm(form.final.model, data=complete(imputed.data, m), family="binomial")
+coef(summary(final.model))[order(coef(summary(final.model))[, 4]),]
+```
+
+# Assess performance
+```{r, eval=TRUE}
+lp.all <- predict(final.model, newdata=complete(imputed.data, m))
+PredictionTools::val.prob.mi(lp.mi=lp.all, y=as.numeric(work.data$HypoP)-1)
+```
