@@ -114,7 +114,7 @@ options(digits=8)
 ```
 
 # 1. Functional form
-```{r, eval=TRUE}
+```{r, eval=TRUE, warning=FALSE}
 # all possible predictors
 # include either PTH24u or dPTH
 # include either Ca24u or CorrCa24u or dCa24u or dCorrCa24u
@@ -135,9 +135,11 @@ for (functional.form in functional.forms){
 }
 print(cbind(functional.forms, model.AICs))
 cat("Minimum AIC:", which(model.AICs==min(model.AICs)))
+
+# Warning message means that we predict exact 0 and 1 due to smalls ample size (see https://www.statology.org/glm-fit-fitted-probabilities-numerically-0-or-1-occurred/)
 ```
 # 2. Functional form
-```{r, eval=TRUE}
+```{r, eval=TRUE, warning=FALSE}
 # plot most flexible model
 form.flexible.model <- HypoP ~ rms::rcs(dPTH) + 
   rms::rcs(dCorrCa24u) + 
@@ -171,7 +173,7 @@ print(cbind(functional.forms, model.AICs))
 cat("Minimum AIC:", which(model.AICs==min(model.AICs)))
 ```
 # Full model
-```{r, eval=TRUE}
+```{r, eval=TRUE, warning=FALSE}
 # linear
 form.full.model <- HypoP ~ dPTH + 
   BSKnietgezien + 
@@ -187,7 +189,7 @@ an.full <- stats::anova(full.model)
 CI.full.model <- confint(full.model)
 ```
 # Backward selection
-```{r, eval=TRUE}
+```{r, eval=TRUE, warning=FALSE}
 form.final.model <- HypoP ~ dPTH + 
   BSKnietgezien +
   dCorrCa24u 
@@ -209,7 +211,7 @@ CI.simple.model <- confint(simple.model)
 ```
 
 # Assess performance
-```{r, eval=TRUE, echo=TRUE, message=FALSE, warning=FALSE}
+```{r, eval=TRUE, warning=FALSE}
 # only dPTH
 lp.simple <- predict(simple.model, newdata=mice::complete(imputed.data, m))
 png(file=paste0(file.path, "Results/model.performance.simple.model.png"))
@@ -231,7 +233,7 @@ out.full <- PredictionTools::val.prob.mi(lp.mi=lp.full, y=as.numeric(work.data$H
 grDevices::dev.off()
 ```
 # Calculate optimism using bootstrap using full model and doing backward selection for each bootstrap
-```{r, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+```{r, eval=TRUE, warning=FALSE}
 slope<-NULL
 cindex.orig<-NULL
 opt<-NULL
@@ -252,7 +254,7 @@ cat(" Original C          :", cindex.orig, "\n",
     "Optimism corrected C:", cindex.orig-optimism, "\n")
 ```
 # Save table
-```{r, eval=TRUE}
+```{r, eval=TRUE, warning=FALSE}
 OR.table <- data.frame(names=names(coef(full.model)),
                                 coef.full=sprintf("%.3f", exp(coef(full.model))),
                                 CI.full=paste0("[", sprintf("%.3f", exp(CI.full.model[, "2.5 %"])), "; ", sprintf("%.3f", exp(CI.full.model[, "97.5 %"])), "]"),
@@ -279,7 +281,7 @@ openxlsx::write.xlsx(rbind(OR.table, Cindex.table),
 
 ```
 # Assess leave-one-center-out cross-validation
-```{r, eval=TRUE}
+```{r, eval=TRUE, warning=FALSE}
 # 4 splits
 table(work.data$Validatie1)
 

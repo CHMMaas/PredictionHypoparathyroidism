@@ -519,15 +519,8 @@ for (functional.form in functional.forms){
   form &lt;- eval(parse(text=paste(&quot;HypoP ~&quot;, functional.form, &quot;+ Age_Years + Sex + surgery_type + BSKnietgezien + CHKD&quot;)))
   model &lt;- glm(form, data=mice::complete(imputed.data, m), family=&quot;binomial&quot;)
   model.AICs &lt;- c(model.AICs, model$aic)
-}</code></pre>
-<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
-<pre class="r"><code>print(cbind(functional.forms, model.AICs))</code></pre>
+}
+print(cbind(functional.forms, model.AICs))</code></pre>
 <pre><code>##      functional.forms      model.AICs
 ## [1,] &quot;PTH24u + Ca24u&quot;      212.36665 
 ## [2,] &quot;PTH24u + CorrCa24u&quot;  207.97247 
@@ -539,6 +532,7 @@ for (functional.form in functional.forms){
 ## [8,] &quot;dPTH + dCorrCa24u&quot;   188.3525</code></pre>
 <pre class="r"><code>cat(&quot;Minimum AIC:&quot;, which(model.AICs==min(model.AICs)))</code></pre>
 <pre><code>## Minimum AIC: 6</code></pre>
+<pre class="r"><code># Warning message means that we predict exact 0 and 1 due to smalls ample size (see https://www.statology.org/glm-fit-fitted-probabilities-numerically-0-or-1-occurred/)</code></pre>
 </div>
 <div id="functional-form-1" class="section level1">
 <h1>2. Functional form</h1>
@@ -570,27 +564,8 @@ for (functional.form in functional.forms){
   form &lt;- eval(parse(text=paste(&quot;HypoP ~&quot;, functional.form, &quot;+ Sex + surgery_type + BSKnietgezien + CHKD&quot;)))
   model &lt;- glm(form, data=mice::complete(imputed.data, m), family=&quot;binomial&quot;)
   model.AICs &lt;- c(model.AICs, model$aic)
-}</code></pre>
-<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
-<pre class="r"><code>print(cbind(functional.forms, model.AICs))</code></pre>
+}
+print(cbind(functional.forms, model.AICs))</code></pre>
 <pre><code>##       functional.forms                                              model.AICs
 ##  [1,] &quot;dPTH + dCorrCa24u + Age_Years&quot;                               188.3525  
 ##  [2,] &quot;rms::rcs(dPTH, 3) + dCorrCa24u + Age_Years&quot;                  189.07808 
@@ -615,170 +590,12 @@ form.full.model &lt;- HypoP ~ dPTH +
   Sex + 
   surgery_type + 
   CHKD
-full.model &lt;- glm(form.full.model, data=mice::complete(imputed.data, m), family=&quot;binomial&quot;)</code></pre>
-<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
-<pre class="r"><code># save table
-an.full &lt;- stats::anova(full.model)</code></pre>
-<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+full.model &lt;- glm(form.full.model, data=mice::complete(imputed.data, m), family=&quot;binomial&quot;)
 
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
-<pre class="r"><code>CI.full.model &lt;- confint(full.model)</code></pre>
+# save table
+an.full &lt;- stats::anova(full.model)
+CI.full.model &lt;- confint(full.model)</code></pre>
 <pre><code>## Waiting for profiling to be done...</code></pre>
-<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
 </div>
 <div id="backward-selection" class="section level1">
 <h1>Backward selection</h1>
@@ -789,103 +606,22 @@ an.full &lt;- stats::anova(full.model)</code></pre>
   # Sex +
   # surgery_type +
   # CHKD
-final.model &lt;- glm(form.final.model, data=mice::complete(imputed.data, m), family=&quot;binomial&quot;)</code></pre>
-<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
-<pre class="r"><code>coef(summary(final.model))[order(coef(summary(final.model))[, 4]),]</code></pre>
+final.model &lt;- glm(form.final.model, data=mice::complete(imputed.data, m), family=&quot;binomial&quot;)
+coef(summary(final.model))[order(coef(summary(final.model))[, 4]),]</code></pre>
 <pre><code>##                       Estimate  Std. Error    z value      Pr(&gt;|z|)
 ## (Intercept)      -10.235652126 1.627775368 -6.2881232 3.2132679e-10
 ## dPTH               0.094013208 0.018553362  5.0671792 4.0375420e-07
 ## BSKnietgezienYes   1.674251244 0.499298229  3.3532089 7.9880404e-04
 ## dCorrCa24u         0.069449588 0.030573329  2.2715743 2.3112236e-02</code></pre>
 <pre class="r"><code># save table
-an.final &lt;- stats::anova(final.model, test=&quot;Chisq&quot;)</code></pre>
-<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
-<pre class="r"><code>CI.final.model &lt;- confint(final.model)</code></pre>
+an.final &lt;- stats::anova(final.model, test=&quot;Chisq&quot;)
+CI.final.model &lt;- confint(final.model)</code></pre>
 <pre><code>## Waiting for profiling to be done...</code></pre>
-<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
 <pre class="r"><code># simple model
-simple.model &lt;- glm(HypoP ~ dPTH, data=mice::complete(imputed.data, m), family=&quot;binomial&quot;)</code></pre>
-<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
-<pre class="r"><code>an.simple &lt;- stats::anova(simple.model, test=&quot;Chisq&quot;)
+simple.model &lt;- glm(HypoP ~ dPTH, data=mice::complete(imputed.data, m), family=&quot;binomial&quot;)
+an.simple &lt;- stats::anova(simple.model, test=&quot;Chisq&quot;)
 CI.simple.model &lt;- confint(simple.model)</code></pre>
 <pre><code>## Waiting for profiling to be done...</code></pre>
-<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
 </div>
 <div id="assess-performance" class="section level1">
 <h1>Assess performance</h1>
@@ -929,6 +665,14 @@ grDevices::dev.off()</code></pre>
 <div id="calculate-optimism-using-bootstrap-using-full-model-and-doing-backward-selection-for-each-bootstrap" class="section level1">
 <h1>Calculate optimism using bootstrap using full model and doing
 backward selection for each bootstrap</h1>
+<pre class="r"><code>slope&lt;-NULL
+cindex.orig&lt;-NULL
+opt&lt;-NULL
+cindex.B&lt;-NULL
+
+# for single imputation
+fit&lt;-rms::lrm(form.full.model, data=mice::complete(imputed.data, m), maxit=1000, x=TRUE, y=TRUE)
+v&lt;-rms::validate(fit,method=&quot;boot&quot;,bw=TRUE,rule=&quot;p&quot;,sls=0.05,B=100,pr=FALSE,type=&quot;individual&quot;)</code></pre>
 <pre><code>## 
 ##      Backwards Step-down - Original Model
 ## 
@@ -949,6 +693,16 @@ backward selection for each bootstrap</h1>
 ## Factors in Final Model
 ## 
 ## [1] dPTH          BSKnietgezien dCorrCa24u</code></pre>
+<pre class="r"><code>slope&lt;-c(slope,v[&quot;Slope&quot;,&quot;test&quot;]) # slope of test
+cindex.orig&lt;-c(cindex.orig,(v[&quot;Dxy&quot;,&quot;index.orig&quot;]+1)/2) # original C-index
+optimism&lt;-c(opt,v[&quot;Dxy&quot;,&quot;optimism&quot;]/2) # optimism C-index
+cindex.B&lt;-c(cindex.B,(v[&quot;Dxy&quot;,&quot;index.corrected&quot;]+1)/2) # index corrected C-index
+
+# Show optimism
+cat(&quot; Original C          :&quot;, cindex.orig, &quot;\n&quot;,
+    &quot;Optimism            :&quot;, optimism, &quot;\n&quot;,
+    &quot;Mean bootstrapped C :&quot;, cindex.B, &quot;\n&quot;,
+    &quot;Optimism corrected C:&quot;, cindex.orig-optimism, &quot;\n&quot;)</code></pre>
 <pre><code>##  Original C          : 0.89793902 
 ##  Optimism            : 0.012080769 
 ##  Mean bootstrapped C : 0.88585825 
@@ -1016,9 +770,7 @@ for (type in c(&quot;full&quot;, &quot;final&quot;)){
     grDevices::dev.off()
   }
 }</code></pre>
-<pre><code>## Now fitting full</code></pre>
-<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
-<pre><code>## 
+<pre><code>## Now fitting full
 ## Call:
 ## glm(formula = form.notj, family = &quot;binomial&quot;, data = single.imputed.data[work.data$Validatie1 != 
 ##     Centers[j], ])
@@ -1080,11 +832,6 @@ for (type in c(&quot;full&quot;, &quot;final&quot;)){
 ## Number of Fisher Scoring iterations: 7
 ## 
 ## for center EMC_na2017</code></pre>
-<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
 <pre><code>## 
 ## Call:
 ## glm(formula = form.notj, family = &quot;binomial&quot;, data = single.imputed.data[work.data$Validatie1 != 
@@ -1116,7 +863,6 @@ for (type in c(&quot;full&quot;, &quot;final&quot;)){
 ## Number of Fisher Scoring iterations: 8
 ## 
 ## for center EMC_voor2017</code></pre>
-<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
 <pre><code>## 
 ## Call:
 ## glm(formula = form.notj, family = &quot;binomial&quot;, data = single.imputed.data[work.data$Validatie1 != 
@@ -1148,9 +894,7 @@ for (type in c(&quot;full&quot;, &quot;final&quot;)){
 ## Number of Fisher Scoring iterations: 8
 ## 
 ## for center Regio</code></pre>
-<pre><code>## Now fitting final</code></pre>
-<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
-<pre><code>## 
+<pre><code>## Now fitting final
 ## Call:
 ## glm(formula = form.notj, family = &quot;binomial&quot;, data = single.imputed.data[work.data$Validatie1 != 
 ##     Centers[j], ])
@@ -1204,11 +948,6 @@ for (type in c(&quot;full&quot;, &quot;final&quot;)){
 ## Number of Fisher Scoring iterations: 7
 ## 
 ## for center EMC_na2017</code></pre>
-<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
 <pre><code>## 
 ## Call:
 ## glm(formula = form.notj, family = &quot;binomial&quot;, data = single.imputed.data[work.data$Validatie1 != 
@@ -1236,7 +975,6 @@ for (type in c(&quot;full&quot;, &quot;final&quot;)){
 ## Number of Fisher Scoring iterations: 7
 ## 
 ## for center EMC_voor2017</code></pre>
-<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
 <pre><code>## 
 ## Call:
 ## glm(formula = form.notj, family = &quot;binomial&quot;, data = single.imputed.data[work.data$Validatie1 != 
