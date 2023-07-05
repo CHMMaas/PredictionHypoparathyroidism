@@ -27,7 +27,7 @@ set.seed(1)
 
 # Load data
 ```{r, eval=TRUE, echo=TRUE, message=FALSE, warning=FALSE}
-file.path <- "Z:/Project Hypoparathyroidism/"
+file.path <- "Z:/Project Predict Hypoparathyroidism/"
 original.data <- read.csv(paste0(file.path, "Data/Data.csv"), 
                  stringsAsFactors=TRUE,
                  header = T, sep = ";", dec = ".", 
@@ -35,8 +35,8 @@ original.data <- read.csv(paste0(file.path, "Data/Data.csv"),
                                 "Missing", "missing"))
 
 # variable selection
-cvar <- c("Record_ID", "Center","Readmission","HypoP", "surgery_type", "Sex", "Indicatie",
-          "BSKgezien",  "CHKD", "BSKinPA", "PostPA", "PostOPCa", "Validatie", "Validatie1")
+cvar <- c("Record_ID", "Readmission","HypoP", "surgery_type", "Sex", # "Indicatie",
+          "BSKgezien",  "CHKD", "BSKinPA", "PostPA", "PostOPCa", "Validatie1") #, "Center", "Validatie")
 nvar <- c("BaselinePTH", "PTH24u", "BaseCa", "Basealbu", "Ca24u", "Albu24u",
            "Age_Years")
 work.data <- original.data[c(cvar, nvar)]
@@ -68,18 +68,9 @@ work.data$Albu24u <- as.numeric(work.data$Albu24u)
 
 # Imputation
 ```{r, eval=TRUE}
-# DISCUSS with David: missings max 10%, single imputation is ok?
-summary(work.data)
-sum(is.na(work.data$BSKgezien))/nrow(work.data)*100
-sum(is.na(work.data$CHKD))/nrow(work.data)*100
-sum(is.na(work.data$BSKinPA))/nrow(work.data)*100
-sum(is.na(work.data$PostPA))/nrow(work.data)*100
-sum(is.na(work.data$BaselinePTH))/nrow(work.data)*100
-sum(is.na(work.data$PTH24u))/nrow(work.data)*100
-sum(is.na(work.data$BaseCa))/nrow(work.data)*100
-sum(is.na(work.data$Basealbu))/nrow(work.data)*100
-sum(is.na(work.data$Ca24u))/nrow(work.data)*100
-sum(is.na(work.data$Albu24u))/nrow(work.data)*100
+# single imputation is fine since less than 10% is missing
+colMeans(is.na(work.data))*100
+save(work.data, file=paste0(file.path, "/Data/data.to.be.imputed.Rdata"))
 
 # set-up imputation
 miceHypoP <- mice(work.data, maxit = 0)
@@ -90,43 +81,40 @@ miceHypoP
 ## will not be used as predictor in model
 miceHypoPpred[, "Record_ID"] <- 0
 
-# DISCUSS: why don't you want to use this in imputation model?
-# miceHypoPpred[, "Validatie"] <- 0
-# miceHypoPpred[, "Validatie1"] <- 0
-# miceHypoPpred[, "Indicatie"] <- 0 # DISCUSS: waarom imputeren we Indicatie "Unknown" niet?
-# miceHypoPpred[, "PostOPCa"] <- 0
-
 # single imputation
 m <- 1
 mi <- mice::mice(work.data, m = m, seed = 1,
            method=miceHypoPmeth,
            predictorMatrix=miceHypoPpred,
            print=FALSE) 
-# DISCUSS: why vis="monotone", maxit = 50 (5 is enough?)?
+# TRY visualization vis="monotone"
 ```
 
 # Berekenen PTH daling, gecorrigeerd calcium en gecorrigeerd calcium daling
 ```{r, eval=TRUE}
-mi_long <- complete(mi, action = "long", include = T)
+mi_long <- mice::complete(mi, action = "long", include = T)
+
+# calculate delta PTH, delta Ca, and delta CorrCa
 mi_long$dPTH <- ((mi_long$BaselinePTH - mi_long$PTH24u)/mi_long$BaselinePTH*100)
 mi_long$CorrCaBaseline <- mi_long$BaseCa +((34-mi_long$Basealbu)*0.016)
 mi_long$CorrCa24u <- mi_long$Ca24u +((34-mi_long$Albu24u)*0.016)
 mi_long$dCorrCa24u <- ((mi_long$CorrCaBaseline - mi_long$CorrCa24u)/mi_long$CorrCaBaseline*100)
 mi_long$dCa24u <- ((mi_long$BaseCa - mi_long$Ca24u)/mi_long$BaseCa*100)
+
+# relevel
 mi_long$BSKnietgezien <- ifelse(mi_long$BSKgezien=="Yes", "No", ifelse(mi_long$BSKgezien=="No", "Yes", NA))
 mi_long$BSKnietgezien <- as.factor(mi_long$BSKnietgezien)
+
 imputed.data <- as.mids(mi_long)
 
 # set data distributions
-# DISCUSS David: dPTH voor of na imputatie definiëren, nodig voor plot(Predict)
-dd<-rms::datadist(complete(imputed.data, m))
+dd<-rms::datadist(mice::complete(imputed.data, m))
 options(datadist='dd')
 options(digits=8)
 ```
 
-# Functional form of logistic regression
+# 1. Functional form
 ```{r, eval=TRUE}
-# DISCUSS: rather do this based on clinical expertise
 # all possible predictors
 # include either PTH24u or dPTH
 # include either Ca24u or CorrCa24u or dCa24u or dCorrCa24u
@@ -138,90 +126,202 @@ functional.forms <- list(
   "dPTH + Ca24u",
   "dPTH + CorrCa24u", # BEST
   "dPTH + dCa24u",
-  "dPTH + dCorrCa24u")
+  "dPTH + dCorrCa24u") # Clinically most logical
 model.AICs <- c()
 for (functional.form in functional.forms){
-  form <- eval(parse(text=paste("HypoP ~", functional.form, "+ Age_Years + Sex + Indicatie + surgery_type + BSKgezien + CHKD")))
-  model <- glm(form, data=complete(imputed.data, m), family="binomial")
+  form <- eval(parse(text=paste("HypoP ~", functional.form, "+ Age_Years + Sex + surgery_type + BSKnietgezien + CHKD")))
+  model <- glm(form, data=mice::complete(imputed.data, m), family="binomial")
   model.AICs <- c(model.AICs, model$aic)
 }
 print(cbind(functional.forms, model.AICs))
+cat("Minimum AIC:", which(model.AICs==min(model.AICs)))
 ```
-# Functional form of covariates
+# 2. Functional form
 ```{r, eval=TRUE}
 # plot most flexible model
-form.full.model <- HypoP ~ rcs(dPTH) + 
-  rcs(CorrCa24u) + 
-  rcs(Age_Years) + 
+form.flexible.model <- HypoP ~ rms::rcs(dPTH) + 
+  rms::rcs(dCorrCa24u) + 
+  rms::rcs(Age_Years) + 
   Sex + 
-  Indicatie + 
   surgery_type + 
-  BSKgezien + 
+  BSKnietgezien + 
   CHKD
-full.model <- rms::lrm(form.full.model, data=complete(imputed.data, m))
+full.model <- rms::lrm(form.flexible.model, data=mice::complete(imputed.data, m), maxit=1000, x=TRUE, y=TRUE)
 plot(Predict(full.model))
 
 # check if dPTH, CorrCa14u or age need to be modelled non-linearly
 functional.forms <- list(
-  "rcs(dPTH) + CorrCa24u + Age_Years",
-  "dPTH + rcs(CorrCa24u) + Age_Years",
-  "dPTH + CorrCa24u + rcs(Age_Years)", # BEST
-  "rcs(dPTH) + rcs(CorrCa24u) + Age_Years",
-  "rcs(dPTH) + CorrCa24u + rcs(Age_Years)",
-  "dPTH + rcs(CorrCa24u) + rcs(Age_Years)",
-  "rcs(dPTH) + rcs(CorrCa24u) + rcs(Age_Years)",
-  "dPTH + CorrCa24u + Age_Years + Age_Years^2")
+  "dPTH + dCorrCa24u + Age_Years", # RIGID MODEL
+  "rms::rcs(dPTH, 3) + dCorrCa24u + Age_Years", 
+  "rms::rcs(dPTH, 4) + dCorrCa24u + Age_Years", # BEST
+  "rms::rcs(dPTH, 5) + dCorrCa24u + Age_Years", 
+  "dPTH + rms::rcs(dCorrCa24u) + Age_Years",
+  "dPTH + dCorrCa24u + rms::rcs(Age_Years)", 
+  "rms::rcs(dPTH) + rms::rcs(dCorrCa24u) + Age_Years",
+  "rms::rcs(dPTH) + dCorrCa24u + rms::rcs(Age_Years)",
+  "dPTH + rms::rcs(dCorrCa24u) + rms::rcs(Age_Years)",
+  "rms::rcs(dPTH) + rms::rcs(dCorrCa24u) + rms::rcs(Age_Years)") 
 model.AICs <- c()
 for (functional.form in functional.forms){
-  form <- eval(parse(text=paste("HypoP ~", functional.form, "+ Sex + Indicatie + surgery_type + BSKgezien + CHKD")))
-  model <- glm(form, data=complete(imputed.data, m), family="binomial")
+  form <- eval(parse(text=paste("HypoP ~", functional.form, "+ Sex + surgery_type + BSKnietgezien + CHKD")))
+  model <- glm(form, data=mice::complete(imputed.data, m), family="binomial")
   model.AICs <- c(model.AICs, model$aic)
 }
 print(cbind(functional.forms, model.AICs))
-
-# check what best model looks like
-form.full.model <- HypoP ~ dPTH + 
-  CorrCa24u + 
-  Age_Years + 
-  Age_Years^2 + 
-  Sex + 
-  Indicatie + 
-  surgery_type + 
-  BSKgezien + 
-  CHKD
-full.model <- rms::lrm(form.full.model, data=complete(imputed.data, m))
-plot(Predict(full.model))
+cat("Minimum AIC:", which(model.AICs==min(model.AICs)))
 ```
 # Full model
 ```{r, eval=TRUE}
+# linear
 form.full.model <- HypoP ~ dPTH + 
-  CorrCa24u + 
+  BSKnietgezien + 
+  dCorrCa24u + 
   Age_Years + 
   Sex + 
-  Indicatie + 
   surgery_type + 
-  BSKgezien + 
   CHKD
-full.model <- glm(form.full.model, data=complete(imputed.data, m), family="binomial")
-an <- stats::anova(full.model)
-summary(full.model)
+full.model <- glm(form.full.model, data=mice::complete(imputed.data, m), family="binomial")
+
+# save table
+an.full <- stats::anova(full.model)
+CI.full.model <- confint(full.model)
 ```
 # Backward selection
 ```{r, eval=TRUE}
 form.final.model <- HypoP ~ dPTH + 
-  CorrCa24u + 
-  # Age_Years + 
-  # Sex + 
-  # Indicatie + 
-  # surgery_type + 
-  BSKgezien
+  BSKnietgezien +
+  dCorrCa24u 
+  # Age_Years +
+  # Sex +
+  # surgery_type +
   # CHKD
-final.model <- glm(form.final.model, data=complete(imputed.data, m), family="binomial")
+final.model <- glm(form.final.model, data=mice::complete(imputed.data, m), family="binomial")
 coef(summary(final.model))[order(coef(summary(final.model))[, 4]),]
+
+# save table
+an.final <- stats::anova(final.model, test="Chisq")
+CI.final.model <- confint(final.model)
+
+# simple model
+simple.model <- glm(HypoP ~ dPTH, data=mice::complete(imputed.data, m), family="binomial")
+an.simple <- stats::anova(simple.model, test="Chisq")
+CI.simple.model <- confint(simple.model)
 ```
 
 # Assess performance
+```{r, eval=TRUE, echo=TRUE, message=FALSE, warning=FALSE}
+# only dPTH
+lp.simple <- predict(simple.model, newdata=mice::complete(imputed.data, m))
+png(file=paste0(file.path, "Results/model.performance.simple.model.png"))
+out.simple <- PredictionTools::val.prob.mi(lp.mi=lp.simple, y=as.numeric(work.data$HypoP)-1, dist=TRUE)
+grDevices::dev.off()
+lrtest(simple.model, final.model)
+
+# final model
+lp.final <- predict(final.model, newdata=mice::complete(imputed.data, m))
+png(file=paste0(file.path, "Results/model.performance.final.model.png"))
+out.final <- PredictionTools::val.prob.mi(lp.mi=lp.final, y=as.numeric(work.data$HypoP)-1, dist=TRUE)
+grDevices::dev.off()
+lrtest(final.model, full.model)
+
+# full model
+lp.full <- predict(full.model, newdata=mice::complete(imputed.data, m))
+png(file=paste0(file.path, "Results/model.performance.full.model.png"))
+out.full <- PredictionTools::val.prob.mi(lp.mi=lp.full, y=as.numeric(work.data$HypoP)-1, dist=TRUE)
+grDevices::dev.off()
+```
+# Calculate optimism using bootstrap using full model and doing backward selection for each bootstrap
+```{r, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+slope<-NULL
+cindex.orig<-NULL
+opt<-NULL
+cindex.B<-NULL
+
+# for single imputation
+fit<-rms::lrm(form.full.model, data=mice::complete(imputed.data, m), maxit=1000, x=TRUE, y=TRUE)
+v<-rms::validate(fit,method="boot",bw=TRUE,rule="p",sls=0.05,B=100,pr=FALSE,type="individual")
+slope<-c(slope,v["Slope","test"]) # slope of test
+cindex.orig<-c(cindex.orig,(v["Dxy","index.orig"]+1)/2) # original C-index
+optimism<-c(opt,v["Dxy","optimism"]/2) # optimism C-index
+cindex.B<-c(cindex.B,(v["Dxy","index.corrected"]+1)/2) # index corrected C-index
+
+# Show optimism
+cat(" Original C          :", cindex.orig, "\n",
+    "Optimism            :", optimism, "\n",
+    "Mean bootstrapped C :", cindex.B, "\n",
+    "Optimism corrected C:", cindex.orig-optimism, "\n")
+```
+# Save table
 ```{r, eval=TRUE}
-lp.all <- predict(final.model, newdata=complete(imputed.data, m))
-PredictionTools::val.prob.mi(lp.mi=lp.all, y=as.numeric(work.data$HypoP)-1)
+OR.table <- data.frame(names=names(coef(full.model)),
+                                coef.full=sprintf("%.3f", exp(coef(full.model))),
+                                CI.full=paste0("[", sprintf("%.3f", exp(CI.full.model[, "2.5 %"])), "; ", sprintf("%.3f", exp(CI.full.model[, "97.5 %"])), "]"),
+                                Chi.full=sprintf("%.1f", an.full[, "Deviance"]),
+                                coef.final=c(sprintf("%.3f", exp(coef(final.model))), rep("", 4)),
+                                CI.final=c(paste0("[", sprintf("%.3f", exp(CI.final.model[, "2.5 %"])), "; ", sprintf("%.3f", exp(CI.final.model[, "97.5 %"])), "]"), rep("", 4)),
+                                Chi.final=c(sprintf("%.1f", an.final[, "Deviance"]), rep("", 4)),
+                                coef.simple=c(sprintf("%.3f", exp(coef(simple.model))), rep("", 6)),
+                                CI.simple=c(paste0("[", sprintf("%.3f", exp(CI.simple.model[, "2.5 %"])), "; ", sprintf("%.3f", exp(CI.simple.model[, "97.5 %"])), "]"), rep("", 6)),
+                                Chi.simple=c(sprintf("%.1f", an.simple[, "Deviance"]), rep("", 6)))
+Cindex.table <- c("C-index",
+                  sprintf("%.3f", out.full$cindex-optimism), 
+                  paste0("[", sprintf("%.3f", out.full$cindex.lower-optimism), "; ", sprintf("%.3f", out.full$cindex.upper-optimism), "]"),
+                  "",
+                  sprintf("%.3f", out.final$cindex-optimism), 
+                  paste0("[", sprintf("%.3f", out.final$cindex.lower-optimism), "; ", sprintf("%.3f", out.final$cindex.upper-optimism), "]"),
+                  "",
+                  sprintf("%.3f", out.simple$cindex-optimism), 
+                  paste0("[", sprintf("%.3f", out.simple$cindex.lower-optimism), "; ", sprintf("%.3f", out.simple$cindex.upper-optimism), "]"),
+                  "")
+openxlsx::write.xlsx(rbind(OR.table, Cindex.table),
+            rowNames=FALSE,
+            file=paste0(file.path, "/Results/model.xlsx"))
+
+```
+# Assess leave-one-center-out cross-validation
+```{r, eval=TRUE}
+# 4 splits
+table(work.data$Validatie1)
+
+Centers <- levels(work.data$Validatie1)
+cuts <- 5
+single.imputed.data <- mice::complete(imputed.data, m)
+for (type in c("full", "final")){
+  cat("Now fitting", type)
+  for (j in 1:4){
+    # split outcomes for center j and not j
+    y.j <- as.numeric(work.data$HypoP[work.data$Validatie1==Centers[j]])-1
+    y.notj <- as.numeric(work.data$HypoP[work.data$Validatie1!=Centers[j]])-1
+    
+    # model form for center j and not j
+    form.model <- eval(parse(text=paste0("form.", type, ".model")))
+    form.notj <- update(form.model, y.notj  ~ . )
+    
+    # fit on 3 centers
+    # DISCUSS with David: glm.fit: fitted probabilities numerically 0 or 1 occurred (EMC_voor2017 full model, EMC_na2017 en EMC_voor2017 final model)
+    model.notj <- glm(form.notj, data=single.imputed.data[work.data$Validatie1!=Centers[j],], family="binomial")
+    print(summary(model.notj))
+
+    # make prediction for 1 center
+    cat("for center", Centers[j], "\n")
+    lp.j <- predict(model.notj, newdata=single.imputed.data[work.data$Validatie1==Centers[j],])
+
+    # make plot
+    png(file=paste0(file.path, "Results/Figures/model.performance.", Centers[j], ".png"))
+    out.j <- PredictionTools::val.prob.mi(lp.mi=lp.j, y=y.j, main=Centers[j], g=3, dist=TRUE)
+    grDevices::dev.off()
+  }
+}
+
+# combine 4 calibration plots into one
+png(file=paste0(file.path, "Results/leave.one.out.cross.validation.png"), width=16, height=16, units="cm", res=300)
+par(mar=rep(0, 4))
+layout(matrix(1:4, ncol=2, byrow=TRUE))
+Centers.val <- rep(1:4, 3)
+for (i in 1:4){
+  plot(NA, xlim=0:1, ylim=0:1, xaxt="n", yaxt="n", bty="n")
+  img <- png::readPNG(paste0(file.path, "Results/Figures/model.performance.", Centers[Centers.val[i]], ".png"))
+  rasterImage(img, 0, 0, 1, 1)
+}
+grDevices::dev.off()
 ```

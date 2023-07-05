@@ -1,0 +1,76 @@
+---
+  output: word_document
+---
+
+```{r setup, include=FALSE}
+# clear all
+rm(list = ls(all.names = TRUE))
+if(!is.null(dev.list())) dev.off()
+cat("\014")
+
+# load packages
+library(arsenal)
+library(knitr)
+
+load("Z:/Project Predict Hypoparathyroidism/Data/data.to.be.imputed.Rdata")
+
+# define variables
+work.data$dPTH <- ((work.data$BaselinePTH - work.data$PTH24u)/work.data$BaselinePTH*100)
+work.data$CorrCaBaseline <- work.data$BaseCa +((34-work.data$Basealbu)*0.016)
+work.data$CorrCa24u <- work.data$Ca24u +((34-work.data$Albu24u)*0.016)
+work.data$dCorrCa24u <- ((work.data$CorrCaBaseline - work.data$CorrCa24u)/work.data$CorrCaBaseline*100)
+work.data$dCa24u <- ((work.data$BaseCa - work.data$Ca24u)/work.data$BaseCa*100)
+
+descr.table <- arsenal::tableby(Validatie1 ~ HypoP +
+                                  BaselinePTH + 
+                                  PTH24u +
+                                  dPTH + 
+                                  BaseCa + 
+                                  Basealbu + 
+                                  CorrCaBaseline + 
+                                  Ca24u + 
+                                  Albu24u + 
+                                  CorrCa24u + 
+                                  dCorrCa24u + 
+                                  dCa24u + 
+                                  Age_Years + 
+                                  Sex + 
+                                  surgery_type + 
+                                  BSKgezien + 
+                                  CHKD, 
+  data=work.data, 
+  total.pos="before",
+  digits = 1,
+  test = F,
+  total = T,
+  numeric.test = "kwt", cat.test = "chisq",
+  numeric.stats = c("meansd", "medianq1q3", "range", "Nmiss2"),
+  cat.stats = c("countpct"),
+  stats.labels = list(
+    meansd = "Mean (SD)",
+    medianq1q3 = "Median (Q1, Q3)",
+    range = "Min - Max",
+    Nmiss2 = "Missing"))
+my_labels <- list(HypoP = "Hypoparathyroidism",
+  BaselinePTH = "PTH at baseline",
+  PTH24u = "PTH at 24 hours",
+  dPTH = "Delta PTH", # (Baseline PTH - PTH at 24 hrs)/(Baseline PTH)*100
+  BaseCa = "Calcium at baseline",
+  Basealbu = "Albu at baseline",
+  CorrCaBaseline = "CorrCa at Basline", # Baseline Calcium + ((34-Baseline albu)*0.016)
+  Ca24u = "Calcium at 24 hours",
+  Albu24u = "Albu at 24 hours",
+  CorrCa24u = "CorrCa at 24 hours", # Calcium at 24 hrs + ((34-Albu at 24 hrs)*0.016)
+  dCorrCa24u = "Delta CorrCa", #(CorrCa at baseline - CorrCa at 24 hrs)/(CorrCa at baseline)*100
+  dCa24u = "Delta Calcium", # (Baseline Calcium - Calcium at 24 hrs)/(Baseline Calcium)*100
+  Age_Years = "Age in years",
+  Sex = "Sex",
+  surgery_type = "Surgery type", 
+  BSKgezien = "BSK gezien",
+  CHKD= "CHKD")
+```
+
+Table 1. Descriptive statistics.
+```{r echo=FALSE}
+knitr::kable(summary(descr.table, labelTranslations=my_labels))
+```
