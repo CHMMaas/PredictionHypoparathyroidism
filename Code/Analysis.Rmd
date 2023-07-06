@@ -15,14 +15,14 @@ knitr::opts_chunk$set(echo = TRUE)
 rm(list = ls(all.names = TRUE))
 
 # for reproducibility
-set.seed(100)
+seed <- 2
+set.seed(seed)
 
 # load libraries
 library(haven)
 library(dplyr)
 library(mice)
 library(rms)
-set.seed(1)
 ```
 
 # Load data
@@ -83,15 +83,15 @@ miceHypoPpred[, "Record_ID"] <- 0
 
 # single imputation
 m <- 1
-mi <- mice::mice(work.data, m = m, seed = 1,
+mi <- mice::mice(work.data, m = m, seed = seed,
            method=miceHypoPmeth,
            predictorMatrix=miceHypoPpred,
-           print=FALSE) 
-# TRY visualization vis="monotone"
+           print=FALSE)
 ```
 
 # Berekenen PTH daling, gecorrigeerd calcium en gecorrigeerd calcium daling
 ```{r, eval=TRUE}
+# imputed data in long format
 mi_long <- mice::complete(mi, action = "long", include = T)
 
 # calculate delta PTH, delta Ca, and delta CorrCa
@@ -102,9 +102,10 @@ mi_long$dCorrCa24u <- ((mi_long$CorrCaBaseline - mi_long$CorrCa24u)/mi_long$Corr
 mi_long$dCa24u <- ((mi_long$BaseCa - mi_long$Ca24u)/mi_long$BaseCa*100)
 
 # relevel
-mi_long$BSKnietgezien <- ifelse(mi_long$BSKgezien=="Yes", "No", ifelse(mi_long$BSKgezien=="No", "Yes", NA))
-mi_long$BSKnietgezien <- as.factor(mi_long$BSKnietgezien)
+# mi_long$BSKnietgezien <- ifelse(mi_long$BSKgezien=="Yes", "No", ifelse(mi_long$BSKgezien=="No", "Yes", NA))
+# mi_long$BSKnietgezien <- as.factor(mi_long$BSKnietgezien)
 
+# imputed data into mice format
 imputed.data <- as.mids(mi_long)
 
 # set data distributions
@@ -113,7 +114,7 @@ options(datadist='dd')
 options(digits=8)
 ```
 
-# 1. Functional form
+# 1. Functional form - possible predictors
 ```{r, eval=TRUE, warning=FALSE}
 # all possible predictors
 # include either PTH24u or dPTH
@@ -124,51 +125,66 @@ functional.forms <- list(
   "PTH24u + dCa24u",
   "PTH24u + dCorrCa24u",
   "dPTH + Ca24u",
-  "dPTH + CorrCa24u", # BEST
+  "dPTH + CorrCa24u", # BEST and clinically most practical
   "dPTH + dCa24u",
-  "dPTH + dCorrCa24u") # Clinically most logical
+  "dPTH + dCorrCa24u")
 model.AICs <- c()
+model.BICs <- c()
 for (functional.form in functional.forms){
-  form <- eval(parse(text=paste("HypoP ~", functional.form, "+ Age_Years + Sex + surgery_type + BSKnietgezien + CHKD")))
+  form <- eval(parse(text=paste("HypoP ~", functional.form, "+ Age_Years + Sex + surgery_type + BSKgezien + CHKD")))
   model <- glm(form, data=mice::complete(imputed.data, m), family="binomial")
   model.AICs <- c(model.AICs, model$aic)
 }
+possible.predictors.df <- as.data.frame(cbind(functional.forms, sprintf("%.1f", model.AICs)))
+openxlsx::write.xlsx(possible.predictors.df,
+            rowNames=FALSE,
+            file=paste0(file.path, "/Results/functional.form.xlsx"))
 print(cbind(functional.forms, model.AICs))
 cat("Minimum AIC:", which(model.AICs==min(model.AICs)))
 
 # Warning message means that we predict exact 0 and 1 due to smalls ample size (see https://www.statology.org/glm-fit-fitted-probabilities-numerically-0-or-1-occurred/)
 ```
-# 2. Functional form
+# 2. Functional form - flexibility
 ```{r, eval=TRUE, warning=FALSE}
 # plot most flexible model
-form.flexible.model <- HypoP ~ rms::rcs(dPTH) + 
-  rms::rcs(dCorrCa24u) + 
-  rms::rcs(Age_Years) + 
+form.flexible.model <- HypoP ~ rms::rcs(dPTH, 4) + 
+  rms::rcs(CorrCa24u, 4) + 
+  rms::rcs(Age_Years, 4) + 
   Sex + 
   surgery_type + 
-  BSKnietgezien + 
+  BSKgezien + 
   CHKD
-full.model <- rms::lrm(form.flexible.model, data=mice::complete(imputed.data, m), maxit=1000, x=TRUE, y=TRUE)
-plot(Predict(full.model))
+flexible.model <- rms::lrm(form.flexible.model, data=mice::complete(imputed.data, m), maxit=1000, x=TRUE, y=TRUE)
+grDevices::png(file=paste0(file.path, "Results/plot.Predict.png"))
+plot(Predict(flexible.model))
+grDevices::dev.off()
 
-# check if dPTH, CorrCa14u or age need to be modelled non-linearly
+# check if dPTH, CorrCa or age need to be modelled non-linearly
 functional.forms <- list(
-  "dPTH + dCorrCa24u + Age_Years", # RIGID MODEL
-  "rms::rcs(dPTH, 3) + dCorrCa24u + Age_Years", 
-  "rms::rcs(dPTH, 4) + dCorrCa24u + Age_Years", # BEST
-  "rms::rcs(dPTH, 5) + dCorrCa24u + Age_Years", 
-  "dPTH + rms::rcs(dCorrCa24u) + Age_Years",
-  "dPTH + dCorrCa24u + rms::rcs(Age_Years)", 
-  "rms::rcs(dPTH) + rms::rcs(dCorrCa24u) + Age_Years",
-  "rms::rcs(dPTH) + dCorrCa24u + rms::rcs(Age_Years)",
-  "dPTH + rms::rcs(dCorrCa24u) + rms::rcs(Age_Years)",
-  "rms::rcs(dPTH) + rms::rcs(dCorrCa24u) + rms::rcs(Age_Years)") 
+  "dPTH + CorrCa24u + Age_Years", # RIGID MODEL
+  "rms::rcs(dPTH, 3) + CorrCa24u + Age_Years", 
+  "rms::rcs(dPTH, 4) + CorrCa24u + Age_Years", # BEST
+  "rms::rcs(dPTH, 5) + CorrCa24u + Age_Years", 
+  "dPTH + rms::rcs(CorrCa24u, 3) + Age_Years",
+  "dPTH + rms::rcs(CorrCa24u, 4) + Age_Years",
+  "dPTH + rms::rcs(CorrCa24u, 5) + Age_Years",
+  "dPTH + CorrCa24u + rms::rcs(Age_Years, 3)", 
+  "dPTH + CorrCa24u + rms::rcs(Age_Years, 4)", 
+  "dPTH + CorrCa24u + rms::rcs(Age_Years, 5)", 
+  "rms::rcs(dPTH, 4) + rms::rcs(CorrCa24u, 3) + Age_Years",
+  "rms::rcs(dPTH, 4) + CorrCa24u + rms::rcs(Age_Years, 3)",
+  "dPTH + rms::rcs(CorrCa24u, 3) + rms::rcs(Age_Years, 3)",
+  "rms::rcs(dPTH, 4) + rms::rcs(CorrCa24u, 3) + rms::rcs(Age_Years, 3)") 
 model.AICs <- c()
 for (functional.form in functional.forms){
-  form <- eval(parse(text=paste("HypoP ~", functional.form, "+ Sex + surgery_type + BSKnietgezien + CHKD")))
+  form <- eval(parse(text=paste("HypoP ~", functional.form, "+ Sex + surgery_type + BSKgezien + CHKD")))
   model <- glm(form, data=mice::complete(imputed.data, m), family="binomial")
   model.AICs <- c(model.AICs, model$aic)
 }
+flexibility.df <- as.data.frame(cbind(functional.forms, sprintf("%.1f", model.AICs)))
+openxlsx::write.xlsx(flexibility.df,
+            rowNames=FALSE,
+            file=paste0(file.path, "/Results/flexibility.xlsx"))
 print(cbind(functional.forms, model.AICs))
 cat("Minimum AIC:", which(model.AICs==min(model.AICs)))
 ```
@@ -176,106 +192,190 @@ cat("Minimum AIC:", which(model.AICs==min(model.AICs)))
 ```{r, eval=TRUE, warning=FALSE}
 # linear
 form.full.model <- HypoP ~ dPTH + 
-  BSKnietgezien + 
-  dCorrCa24u + 
+  BSKgezien + 
+  CorrCa24u + 
   Age_Years + 
-  Sex + 
-  surgery_type + 
+  Sex +
+  surgery_type +
   CHKD
-full.model <- glm(form.full.model, data=mice::complete(imputed.data, m), family="binomial")
+full.model <- rms::lrm(form.full.model, data=mice::complete(imputed.data, m), x=TRUE, y=TRUE)
 
-# save table
+best.flexible.model <-  glm("HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + Age_Years + Sex + surgery_type + BSKgezien + CHKD", data=mice::complete(imputed.data, m), family="binomial")
+lrtest(best.flexible.model, full.model)
+```
+
+# Calculate optimism using bootstrap using full model and doing backward selection for each bootstrap
+```{r, eval=TRUE, warning=FALSE}
+# for single imputation
+v<-rms::validate(full.model,method="boot",bw=TRUE,rule="p",sls=0.05,B=100,pr=FALSE,type="individual")
+
+# Show shrinkage factor
+shrinkage.factor <- v["Slope","test"]
+cat("Shrinkage factor     :", shrinkage.factor, "\n")
+
+# Optimism corrected C-index
+cindex.orig<-(v["Dxy","index.orig"]+1)/2   # original C-index
+optimism.C<-v["Dxy","optimism"]/2          # optimism C-index, /2 because  C.orig - C.B the +1 cancels out
+cindex.B<-(v["Dxy","index.corrected"]+1)/2 # index corrected C-index
+cat(" Original C          :", cindex.orig, "\n",
+    "Optimism            :", optimism.C, "\n",
+    "Mean bootstrapped C :", cindex.B, "\n",
+    "Optimism corrected C:", cindex.orig-optimism.C, "\n")
+```
+
+# Save results of full model
+```{r, eval=TRUE}
+# new intercept after shrinkage
+lp.full <- predict(full.model)
+lp.shrunk.full <- shrinkage.factor*lp.full
+full.extra <- lrm.fit(y=mice::complete(imputed.data, m)$HypoP,
+                      offset=lp.shrunk.full)
+full.intercept.extra <- coef(full.extra)[1]
+full.intercept.shrunk <- shrinkage.factor*full.model$coefficients["Intercept"]+full.intercept.extra
+
+# check
+mean(mice::complete(imputed.data, m)$HypoP=="Yes") # event probability
+mean(plogis(lp.shrunk.full+full.intercept.extra))  # same
+
+# save results
 an.full <- stats::anova(full.model)
-CI.full.model <- confint(full.model)
+coef.full.model <- shrinkage.factor*summary(full.model, 
+                                            dPTH=c(0, 1),
+                                            CorrCa24u=c(0, 0.1),
+                                            BSKgezien="No")[which(summary(full.model)[, "Type"]==1), c("Effect")]
+Int.full.CI.lower <- full.model$coefficients["Intercept"]+qnorm(0.025)*sqrt(diag(full.model$var)[1])
+Int.full.CI.upper <- full.model$coefficients["Intercept"]+qnorm(0.975)*sqrt(diag(full.model$var)[1])
+CI.full.model <- exp(rbind(c(shrinkage.factor*Int.full.CI.lower+full.intercept.extra, 
+                             shrinkage.factor*Int.full.CI.upper+full.intercept.extra), 
+                           shrinkage.factor*cbind(coef.full.model+qnorm(0.025)*sqrt(diag(full.model$var)[-1]),
+                                                  coef.full.model+qnorm(0.975)*sqrt(diag(full.model$var)[-1]))))
+OR.full.model <- exp(c(full.intercept.shrunk, coef.full.model))
 ```
 # Backward selection
 ```{r, eval=TRUE, warning=FALSE}
 form.final.model <- HypoP ~ dPTH + 
-  BSKnietgezien +
-  dCorrCa24u 
+  BSKgezien +
+  CorrCa24u 
   # Age_Years +
   # Sex +
   # surgery_type +
   # CHKD
-final.model <- glm(form.final.model, data=mice::complete(imputed.data, m), family="binomial")
-coef(summary(final.model))[order(coef(summary(final.model))[, 4]),]
+final.model <- lrm(form.final.model, data=mice::complete(imputed.data, m))
 
-# save table
-an.final <- stats::anova(final.model, test="Chisq")
-CI.final.model <- confint(final.model)
+# new intercept after shrinkage
+lp.final <- predict(final.model)
+lp.shrunk.final <- shrinkage.factor*lp.final
+final.extra <- lrm.fit(y=mice::complete(imputed.data, m)$HypoP,
+                      offset=lp.shrunk.final)
+final.intercept.extra <- coef(final.extra)[1]
+final.intercept.shrunk <- shrinkage.factor*final.model$coefficients["Intercept"]+final.intercept.extra
 
-# simple model
-simple.model <- glm(HypoP ~ dPTH, data=mice::complete(imputed.data, m), family="binomial")
-an.simple <- stats::anova(simple.model, test="Chisq")
-CI.simple.model <- confint(simple.model)
+# check
+mean(mice::complete(imputed.data, m)$HypoP=="Yes") # event probability
+mean(plogis(lp.shrunk.final+final.intercept.extra))  # same
+
+# save results
+an.final <- stats::anova(final.model)
+coef.final.model <- shrinkage.factor*summary(final.model, 
+                                            dPTH=c(0, 1),
+                                            CorrCa24u=c(0, 0.1),
+                                            BSKgezien="No")[which(summary(final.model)[, "Type"]==1), c("Effect")]
+Int.CI.lower <- final.model$coefficients["Intercept"]+qnorm(0.025)*sqrt(diag(final.model$var)[1])
+Int.CI.upper <- final.model$coefficients["Intercept"]+qnorm(0.975)*sqrt(diag(final.model$var)[1])
+CI.final.model <- exp(rbind(c(shrinkage.factor*Int.CI.lower+final.intercept.extra, 
+                              shrinkage.factor*Int.CI.upper+final.intercept.extra),
+                            shrinkage.factor*cbind(coef.final.model+qnorm(0.025)*sqrt(diag(final.model$var)[-1]),
+                                                   coef.final.model+qnorm(0.975)*sqrt(diag(final.model$var)[-1]))))
+OR.final.model <- exp(c(final.intercept.shrunk, coef.final.model))
+```
+
+# Simple model
+```{r, eval=TRUE, warning=FALSE}
+simple.model <- rms::lrm(HypoP ~ dPTH, data=mice::complete(imputed.data, m))
+
+# new intercept after shrinkage
+lp.simple <- predict(simple.model)
+lp.shrunk.simple <- shrinkage.factor*lp.simple
+simple.extra <- lrm.fit(y=mice::complete(imputed.data, m)$HypoP,
+                      offset=lp.shrunk.simple)
+simple.intercept.extra <- coef(simple.extra)[1]
+simple.intercept.shrunk <- shrinkage.factor*simple.model$coefficients["Intercept"]+simple.intercept.extra
+
+# check
+mean(mice::complete(imputed.data, m)$HypoP=="Yes") # event probability
+mean(plogis(lp.shrunk.simple+simple.intercept.extra))  # same
+
+# save results
+an.simple <- stats::anova(simple.model)
+coef.simple.model <- shrinkage.factor*summary(simple.model, 
+                                              dPTH=c(0, 1))[which(summary(simple.model)[, "Type"]==1), c("Effect")]
+Int.simple.CI.lower <- simple.model$coefficients["Intercept"]+qnorm(0.025)*sqrt(diag(simple.model$var)[1])
+Int.simple.CI.upper <- simple.model$coefficients["Intercept"]+qnorm(0.975)*sqrt(diag(simple.model$var)[1])
+CI.simple.model <- exp(rbind(c(shrinkage.factor*Int.simple.CI.lower+simple.intercept.extra, 
+                               shrinkage.factor*Int.simple.CI.upper+simple.intercept.extra),
+                             shrinkage.factor*cbind(coef.simple.model+qnorm(0.025)*sqrt(diag(simple.model$var)[-1]),
+                                                    coef.simple.model+qnorm(0.975)*sqrt(diag(simple.model$var)[-1]))))
+OR.simple.model <- exp(c(simple.intercept.shrunk, coef.simple.model))
 ```
 
 # Assess performance
 ```{r, eval=TRUE, warning=FALSE}
 # only dPTH
 lp.simple <- predict(simple.model, newdata=mice::complete(imputed.data, m))
-png(file=paste0(file.path, "Results/model.performance.simple.model.png"))
+png(file=paste0(file.path, "Results/model.performance.simple.model.png"), 
+    width=400, height=400, units="px")
 out.simple <- PredictionTools::val.prob.mi(lp.mi=lp.simple, y=as.numeric(work.data$HypoP)-1, dist=TRUE)
 grDevices::dev.off()
 lrtest(simple.model, final.model)
 
 # final model
 lp.final <- predict(final.model, newdata=mice::complete(imputed.data, m))
-png(file=paste0(file.path, "Results/model.performance.final.model.png"))
+png(file=paste0(file.path, "Results/model.performance.final.model.png"), 
+    width=400, height=400, units="px")
 out.final <- PredictionTools::val.prob.mi(lp.mi=lp.final, y=as.numeric(work.data$HypoP)-1, dist=TRUE)
 grDevices::dev.off()
 lrtest(final.model, full.model)
 
 # full model
 lp.full <- predict(full.model, newdata=mice::complete(imputed.data, m))
-png(file=paste0(file.path, "Results/model.performance.full.model.png"))
+png(file=paste0(file.path, "Results/model.performance.full.model.png"), 
+    width=400, height=400, units="px")
 out.full <- PredictionTools::val.prob.mi(lp.mi=lp.full, y=as.numeric(work.data$HypoP)-1, dist=TRUE)
 grDevices::dev.off()
 ```
-# Calculate optimism using bootstrap using full model and doing backward selection for each bootstrap
-```{r, eval=TRUE, warning=FALSE}
-slope<-NULL
-cindex.orig<-NULL
-opt<-NULL
-cindex.B<-NULL
-
-# for single imputation
-fit<-rms::lrm(form.full.model, data=mice::complete(imputed.data, m), maxit=1000, x=TRUE, y=TRUE)
-v<-rms::validate(fit,method="boot",bw=TRUE,rule="p",sls=0.05,B=100,pr=FALSE,type="individual")
-slope<-c(slope,v["Slope","test"]) # slope of test
-cindex.orig<-c(cindex.orig,(v["Dxy","index.orig"]+1)/2) # original C-index
-optimism<-c(opt,v["Dxy","optimism"]/2) # optimism C-index
-cindex.B<-c(cindex.B,(v["Dxy","index.corrected"]+1)/2) # index corrected C-index
-
-# Show optimism
-cat(" Original C          :", cindex.orig, "\n",
-    "Optimism            :", optimism, "\n",
-    "Mean bootstrapped C :", cindex.B, "\n",
-    "Optimism corrected C:", cindex.orig-optimism, "\n")
-```
 # Save table
 ```{r, eval=TRUE, warning=FALSE}
-OR.table <- data.frame(names=names(coef(full.model)),
-                                coef.full=sprintf("%.3f", exp(coef(full.model))),
-                                CI.full=paste0("[", sprintf("%.3f", exp(CI.full.model[, "2.5 %"])), "; ", sprintf("%.3f", exp(CI.full.model[, "97.5 %"])), "]"),
-                                Chi.full=sprintf("%.1f", an.full[, "Deviance"]),
-                                coef.final=c(sprintf("%.3f", exp(coef(final.model))), rep("", 4)),
-                                CI.final=c(paste0("[", sprintf("%.3f", exp(CI.final.model[, "2.5 %"])), "; ", sprintf("%.3f", exp(CI.final.model[, "97.5 %"])), "]"), rep("", 4)),
-                                Chi.final=c(sprintf("%.1f", an.final[, "Deviance"]), rep("", 4)),
-                                coef.simple=c(sprintf("%.3f", exp(coef(simple.model))), rep("", 6)),
-                                CI.simple=c(paste0("[", sprintf("%.3f", exp(CI.simple.model[, "2.5 %"])), "; ", sprintf("%.3f", exp(CI.simple.model[, "97.5 %"])), "]"), rep("", 6)),
-                                Chi.simple=c(sprintf("%.1f", an.simple[, "Deviance"]), rep("", 6)))
+OR.table <- data.frame(names=names(full.model$coefficients),
+                                coef.full=sprintf("%.3f", OR.full.model),
+                                CI.full=c(paste0("[", sprintf("%.3f", CI.full.model[, 1]), "; ", 
+                                               sprintf("%.3f", CI.full.model[, 2]), "]")),
+                                Chi.full=c("", sprintf("%.1f", an.full[-nrow(an.full), "Chi-Square"])),
+                                coef.final=c(sprintf("%.3f", OR.final.model), rep("", 4)),
+                                CI.final=c(paste0("[", sprintf("%.3f", CI.final.model[, 1]), "; ", 
+                                               sprintf("%.3f", CI.final.model[, 2]), "]"), rep("", 4)),
+                                Chi.final=c("", sprintf("%.1f", an.final[-nrow(an.final), "Chi-Square"]),
+                                            rep("", 4)),
+                                coef.simple=c(sprintf("%.3f", OR.simple.model), rep("", 6)),
+                                CI.simple=c(paste0("[", sprintf("%.3f", CI.simple.model[, 1]), "; ", 
+                                               sprintf("%.3f", CI.simple.model[, 2]), "]"),
+                                            rep("", 6)),
+                                Chi.simple=c("", sprintf("%.1f", an.simple[-nrow(an.simple), "Chi-Square"]),
+                                             rep("", 6)))
 Cindex.table <- c("C-index",
-                  sprintf("%.3f", out.full$cindex-optimism), 
-                  paste0("[", sprintf("%.3f", out.full$cindex.lower-optimism), "; ", sprintf("%.3f", out.full$cindex.upper-optimism), "]"),
+                  sprintf("%.3f", out.full$cindex-optimism.C), 
+                  paste0("[", sprintf("%.3f", out.full$cindex.lower-optimism.C), "; ", sprintf("%.3f", out.full$cindex.upper-optimism.C), "]"),
                   "",
-                  sprintf("%.3f", out.final$cindex-optimism), 
-                  paste0("[", sprintf("%.3f", out.final$cindex.lower-optimism), "; ", sprintf("%.3f", out.final$cindex.upper-optimism), "]"),
+                  sprintf("%.3f", out.final$cindex-optimism.C), 
+                  paste0("[", sprintf("%.3f", out.final$cindex.lower-optimism.C), "; ", sprintf("%.3f", out.final$cindex.upper-optimism.C), "]"),
                   "",
-                  sprintf("%.3f", out.simple$cindex-optimism), 
-                  paste0("[", sprintf("%.3f", out.simple$cindex.lower-optimism), "; ", sprintf("%.3f", out.simple$cindex.upper-optimism), "]"),
+                  sprintf("%.3f", out.simple$cindex-optimism.C), 
+                  paste0("[", sprintf("%.3f", out.simple$cindex.lower-optimism.C), "; ", sprintf("%.3f", out.simple$cindex.upper-optimism.C), "]"),
                   "")
-openxlsx::write.xlsx(rbind(OR.table, Cindex.table),
+combined.table <- rbind(OR.table, Cindex.table)
+final.table <- cbind(combined.table[, 1:4], rep("", nrow(combined.table)),
+                     combined.table[, 5:7], rep("", nrow(combined.table)),
+                     combined.table[, 8:10])
+openxlsx::write.xlsx(final.table,
             rowNames=FALSE,
             file=paste0(file.path, "/Results/model.xlsx"))
 
