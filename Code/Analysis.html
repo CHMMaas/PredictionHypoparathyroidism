@@ -359,7 +359,7 @@ pre code {
 hypoparathyroidism</h1>
 <h4 class="author">Carolien C.H.M. Maas, Erasmus MC, Rotterdam, The
 Netherlands</h4>
-<h4 class="date">June 2023</h4>
+<h4 class="date">July 2023</h4>
 
 </div>
 
@@ -370,7 +370,7 @@ Netherlands</h4>
 rm(list = ls(all.names = TRUE))
 
 # for reproducibility
-seed &lt;- 2
+seed &lt;- 1
 set.seed(seed)
 
 # load libraries
@@ -389,8 +389,8 @@ original.data &lt;- read.csv(paste0(file.path, &quot;Data/Data.csv&quot;),
                                 &quot;Missing&quot;, &quot;missing&quot;))
 
 # variable selection
-cvar &lt;- c(&quot;Record_ID&quot;, &quot;Readmission&quot;,&quot;HypoP&quot;, &quot;surgery_type&quot;, &quot;Sex&quot;, # &quot;Indicatie&quot;,
-          &quot;BSKgezien&quot;,  &quot;CHKD&quot;, &quot;BSKinPA&quot;, &quot;PostPA&quot;, &quot;PostOPCa&quot;, &quot;Validatie1&quot;) #, &quot;Center&quot;, &quot;Validatie&quot;)
+cvar &lt;- c(&quot;Record_ID&quot;, &quot;Readmission&quot;,&quot;HypoP&quot;, &quot;surgery_type&quot;, &quot;Sex&quot;, # &quot;Indicatie&quot;, &quot;Center&quot;, &quot;Validatie&quot;
+          &quot;BSKgezien&quot;,  &quot;CHKD&quot;, &quot;BSKinPA&quot;, &quot;PostPA&quot;, &quot;PostOPCa&quot;, &quot;Validatie1&quot;)
 nvar &lt;- c(&quot;BaselinePTH&quot;, &quot;PTH24u&quot;, &quot;BaseCa&quot;, &quot;Basealbu&quot;, &quot;Ca24u&quot;, &quot;Albu24u&quot;,
            &quot;Age_Years&quot;)
 work.data &lt;- original.data[c(cvar, nvar)]</code></pre>
@@ -470,7 +470,8 @@ miceHypoP</code></pre>
 miceHypoPpred[, &quot;Record_ID&quot;] &lt;- 0
 
 # single imputation
-m &lt;- 1
+m &lt;- 5
+m.choose &lt;- 1
 mi &lt;- mice::mice(work.data, m = m, seed = seed,
            method=miceHypoPmeth,
            predictorMatrix=miceHypoPpred,
@@ -489,22 +490,17 @@ mi_long$CorrCa24u &lt;- mi_long$Ca24u +((34-mi_long$Albu24u)*0.016)
 mi_long$dCorrCa24u &lt;- ((mi_long$CorrCaBaseline - mi_long$CorrCa24u)/mi_long$CorrCaBaseline*100)
 mi_long$dCa24u &lt;- ((mi_long$BaseCa - mi_long$Ca24u)/mi_long$BaseCa*100)
 
-# relevel
-# mi_long$BSKnietgezien &lt;- ifelse(mi_long$BSKgezien==&quot;Yes&quot;, &quot;No&quot;, ifelse(mi_long$BSKgezien==&quot;No&quot;, &quot;Yes&quot;, NA))
-# mi_long$BSKnietgezien &lt;- as.factor(mi_long$BSKnietgezien)
-
 # imputed data into mice format
 imputed.data &lt;- as.mids(mi_long)
 
 # set data distributions
-dd&lt;-rms::datadist(mice::complete(imputed.data, m))
+dd&lt;-rms::datadist(mice::complete(imputed.data, m.choose))
 options(datadist=&#39;dd&#39;)
 options(digits=8)</code></pre>
 </div>
 <div id="functional-form---possible-predictors" class="section level1">
 <h1>1. Functional form - possible predictors</h1>
-<pre class="r"><code># all possible predictors
-# include either PTH24u or dPTH
+<pre class="r"><code># include either PTH24u or dPTH
 # include either Ca24u or CorrCa24u or dCa24u or dCorrCa24u
 functional.forms &lt;- list(
   &quot;PTH24u + Ca24u&quot;,
@@ -516,11 +512,10 @@ functional.forms &lt;- list(
   &quot;dPTH + dCa24u&quot;,
   &quot;dPTH + dCorrCa24u&quot;)
 model.AICs &lt;- c()
-model.BICs &lt;- c()
 for (functional.form in functional.forms){
   form &lt;- eval(parse(text=paste(&quot;HypoP ~&quot;, functional.form, &quot;+ Age_Years + Sex + surgery_type + BSKgezien + CHKD&quot;)))
-  model &lt;- glm(form, data=mice::complete(imputed.data, m), family=&quot;binomial&quot;)
-  model.AICs &lt;- c(model.AICs, model$aic)
+  model &lt;- rms::lrm(form, data=mice::complete(imputed.data, m.choose)) # SINGLE IMPUTATION
+  model.AICs &lt;- c(model.AICs, stats::AIC(model))
 }
 possible.predictors.df &lt;- as.data.frame(cbind(functional.forms, sprintf(&quot;%.1f&quot;, model.AICs)))
 openxlsx::write.xlsx(possible.predictors.df,
@@ -528,14 +523,14 @@ openxlsx::write.xlsx(possible.predictors.df,
             file=paste0(file.path, &quot;/Results/functional.form.xlsx&quot;))
 print(cbind(functional.forms, model.AICs))</code></pre>
 <pre><code>##      functional.forms      model.AICs
-## [1,] &quot;PTH24u + Ca24u&quot;      209.87134 
-## [2,] &quot;PTH24u + CorrCa24u&quot;  205.73759 
-## [3,] &quot;PTH24u + dCa24u&quot;     213.67366 
-## [4,] &quot;PTH24u + dCorrCa24u&quot; 210.74804 
-## [5,] &quot;dPTH + Ca24u&quot;        194.11706 
-## [6,] &quot;dPTH + CorrCa24u&quot;    191.33897 
-## [7,] &quot;dPTH + dCa24u&quot;       196.18885 
-## [8,] &quot;dPTH + dCorrCa24u&quot;   194.18161</code></pre>
+## [1,] &quot;PTH24u + Ca24u&quot;      217.46346 
+## [2,] &quot;PTH24u + CorrCa24u&quot;  212.61244 
+## [3,] &quot;PTH24u + dCa24u&quot;     223.92924 
+## [4,] &quot;PTH24u + dCorrCa24u&quot; 220.7569  
+## [5,] &quot;dPTH + Ca24u&quot;        193.62584 
+## [6,] &quot;dPTH + CorrCa24u&quot;    190.47372 
+## [7,] &quot;dPTH + dCa24u&quot;       197.48065 
+## [8,] &quot;dPTH + dCorrCa24u&quot;   195.82417</code></pre>
 <pre class="r"><code>cat(&quot;Minimum AIC:&quot;, which(model.AICs==min(model.AICs)))</code></pre>
 <pre><code>## Minimum AIC: 6</code></pre>
 <pre class="r"><code># Warning message means that we predict exact 0 and 1 due to smalls ample size (see https://www.statology.org/glm-fit-fitted-probabilities-numerically-0-or-1-occurred/)</code></pre>
@@ -550,7 +545,8 @@ form.flexible.model &lt;- HypoP ~ rms::rcs(dPTH, 4) +
   surgery_type + 
   BSKgezien + 
   CHKD
-flexible.model &lt;- rms::lrm(form.flexible.model, data=mice::complete(imputed.data, m), maxit=1000, x=TRUE, y=TRUE)
+flexible.model &lt;- rms::lrm(form.flexible.model, data=mice::complete(imputed.data, m.choose), 
+                           maxit=1000, x=TRUE, y=TRUE)
 grDevices::png(file=paste0(file.path, &quot;Results/plot.Predict.png&quot;))
 plot(Predict(flexible.model))
 grDevices::dev.off()</code></pre>
@@ -575,8 +571,9 @@ functional.forms &lt;- list(
 model.AICs &lt;- c()
 for (functional.form in functional.forms){
   form &lt;- eval(parse(text=paste(&quot;HypoP ~&quot;, functional.form, &quot;+ Sex + surgery_type + BSKgezien + CHKD&quot;)))
-  model &lt;- glm(form, data=mice::complete(imputed.data, m), family=&quot;binomial&quot;)
-  model.AICs &lt;- c(model.AICs, model$aic)
+  model &lt;- rms::lrm(form, data=mice::complete(imputed.data, m.choose), # SINGLE IMPUTATION
+                    maxit=1000, x=TRUE, y=TRUE)
+  model.AICs &lt;- c(model.AICs, stats::AIC(model))
 }
 flexibility.df &lt;- as.data.frame(cbind(functional.forms, sprintf(&quot;%.1f&quot;, model.AICs)))
 openxlsx::write.xlsx(flexibility.df,
@@ -599,20 +596,20 @@ print(cbind(functional.forms, model.AICs))</code></pre>
 ## [13,] &quot;dPTH + rms::rcs(CorrCa24u, 3) + rms::rcs(Age_Years, 3)&quot;             
 ## [14,] &quot;rms::rcs(dPTH, 4) + rms::rcs(CorrCa24u, 3) + rms::rcs(Age_Years, 3)&quot;
 ##       model.AICs
-##  [1,] 191.33897 
-##  [2,] 191.77792 
-##  [3,] 190.20611 
-##  [4,] 192.50825 
-##  [5,] 193.13775 
-##  [6,] 195.15621 
-##  [7,] 196.98107 
-##  [8,] 192.22248 
-##  [9,] 194.3445  
-## [10,] 193.62346 
-## [11,] 192.1678  
-## [12,] 191.1847  
-## [13,] 194.009   
-## [14,] 193.14086</code></pre>
+##  [1,] 190.47372 
+##  [2,] 191.61474 
+##  [3,] 190.30413 
+##  [4,] 191.77362 
+##  [5,] 191.9538  
+##  [6,] 193.87146 
+##  [7,] 195.78262 
+##  [8,] 191.29013 
+##  [9,] 193.2286  
+## [10,] 192.06207 
+## [11,] 191.95554 
+## [12,] 191.21536 
+## [13,] 192.63606 
+## [14,] 192.75722</code></pre>
 <pre class="r"><code>cat(&quot;Minimum AIC:&quot;, which(model.AICs==min(model.AICs)))</code></pre>
 <pre><code>## Minimum AIC: 3</code></pre>
 </div>
@@ -626,40 +623,54 @@ form.full.model &lt;- HypoP ~ dPTH +
   Sex +
   surgery_type +
   CHKD
-full.model &lt;- rms::lrm(form.full.model, data=mice::complete(imputed.data, m), x=TRUE, y=TRUE)
 
-best.flexible.model &lt;-  glm(&quot;HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + Age_Years + Sex + surgery_type + BSKgezien + CHKD&quot;, data=mice::complete(imputed.data, m), family=&quot;binomial&quot;)
-lrtest(best.flexible.model, full.model)</code></pre>
+# fit using multiple imputation
+full.model &lt;- Hmisc::fit.mult.impute(form.full.model, lrm, 
+                                          xtrans=imputed.data,
+                                          data=work.data,
+                                          n.impute=m, pr=FALSE, fit.reps=TRUE, 
+                                          fitargs=list(y=TRUE, x=TRUE, se.fit=TRUE))</code></pre>
+</div>
+<div id="compare-best-flexible-model-with-full-model-in-single-imputation" class="section level1">
+<h1>Compare best flexible model with full model in single
+imputation</h1>
+<pre class="r"><code>full.model.single &lt;- rms::lrm(form.full.model, data=mice::complete(imputed.data, m.choose), # SINGLE IMPUTATION
+                              x=TRUE, y=TRUE)
+best.flexible.model &lt;- rms::lrm(HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + Age_Years + Sex + surgery_type + BSKgezien + CHKD,
+                                data=mice::complete(imputed.data, m.choose), # SINGLE IMPUTATION
+                                maxit=1000, x=TRUE, y=TRUE)
+lrtest(best.flexible.model, full.model.single)</code></pre>
 <pre><code>## 
 ## Model 1: HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + Age_Years + Sex + surgery_type + 
 ##     BSKgezien + CHKD
 ## Model 2: HypoP ~ dPTH + BSKgezien + CorrCa24u + Age_Years + Sex + surgery_type + 
 ##     CHKD
 ## 
-##  L.R. Chisq        d.f.           P 
-## 5.132862573 2.000000000 0.076809167</code></pre>
+## L.R. Chisq       d.f.          P 
+## 4.16958768 2.00000000 0.12433275</code></pre>
 </div>
 <div id="calculate-optimism-using-bootstrap-using-full-model-and-doing-backward-selection-for-each-bootstrap" class="section level1">
 <h1>Calculate optimism using bootstrap using full model and doing
 backward selection for each bootstrap</h1>
 <pre class="r"><code># for single imputation
-v&lt;-rms::validate(full.model,method=&quot;boot&quot;,bw=TRUE,rule=&quot;p&quot;,sls=0.05,B=100,pr=FALSE,type=&quot;individual&quot;)</code></pre>
+v &lt;- rms::validate(full.model, method=&quot;boot&quot;, bw=TRUE, rule=&quot;p&quot;, sls=0.05, B=100,
+                   pr=FALSE, type=&quot;individual&quot;)</code></pre>
 <pre><code>## 
 ##      Backwards Step-down - Original Model
 ## 
 ##  Deleted      Chi-Sq d.f. P      Residual d.f. P      AIC  
-##  Sex          0.01   1    0.9094 0.01     1    0.9094 -1.99
-##  surgery_type 0.28   1    0.5943 0.30     2    0.8622 -3.70
-##  CHKD         0.37   1    0.5442 0.66     3    0.8815 -5.34
-##  Age_Years    0.77   1    0.3815 1.43     4    0.8389 -6.57
+##  Sex          0.00   1    0.9987 0.00     1    0.9987 -2.00
+##  Age_Years    0.22   1    0.6410 0.22     2    0.8970 -3.78
+##  surgery_type 0.48   1    0.4896 0.69     3    0.8744 -5.31
+##  CHKD         0.49   1    0.4837 1.19     4    0.8805 -6.81
 ## 
 ## Approximate Estimates after Deleting Factors
 ## 
-##                   Coef    S.E.  Wald Z         P
-## Intercept     -0.46993 3.35187 -0.1402 8.885e-01
-## dPTH           0.08615 0.01782  4.8341 1.338e-06
-## BSKgezien=Yes -1.34841 0.49276 -2.7364 6.211e-03
-## CorrCa24u     -3.50283 1.37390 -2.5496 1.079e-02
+##                   Coef    S.E.   Wald Z         P
+## Intercept      0.12572 3.54292  0.03549 9.717e-01
+## dPTH           0.09281 0.02121  4.37531 1.213e-05
+## BSKgezien=Yes -1.52661 0.51238 -2.97945 2.888e-03
+## CorrCa24u     -4.02580 1.43819 -2.79921 5.123e-03
 ## 
 ## Factors in Final Model
 ## 
@@ -667,7 +678,7 @@ v&lt;-rms::validate(full.model,method=&quot;boot&quot;,bw=TRUE,rule=&quot;p&quot
 <pre class="r"><code># Show shrinkage factor
 shrinkage.factor &lt;- v[&quot;Slope&quot;,&quot;test&quot;]
 cat(&quot;Shrinkage factor     :&quot;, shrinkage.factor, &quot;\n&quot;)</code></pre>
-<pre><code>## Shrinkage factor     : 0.85835023</code></pre>
+<pre><code>## Shrinkage factor     : 0.87402286</code></pre>
 <pre class="r"><code># Optimism corrected C-index
 cindex.orig&lt;-(v[&quot;Dxy&quot;,&quot;index.orig&quot;]+1)/2   # original C-index
 optimism.C&lt;-v[&quot;Dxy&quot;,&quot;optimism&quot;]/2          # optimism C-index, /2 because  C.orig - C.B the +1 cancels out
@@ -676,39 +687,10 @@ cat(&quot; Original C          :&quot;, cindex.orig, &quot;\n&quot;,
     &quot;Optimism            :&quot;, optimism.C, &quot;\n&quot;,
     &quot;Mean bootstrapped C :&quot;, cindex.B, &quot;\n&quot;,
     &quot;Optimism corrected C:&quot;, cindex.orig-optimism.C, &quot;\n&quot;)</code></pre>
-<pre><code>##  Original C          : 0.89299831 
-##  Optimism            : 0.015892775 
-##  Mean bootstrapped C : 0.87710553 
-##  Optimism corrected C: 0.87710553</code></pre>
-</div>
-<div id="save-results-of-full-model" class="section level1">
-<h1>Save results of full model</h1>
-<pre class="r"><code># new intercept after shrinkage
-lp.full &lt;- predict(full.model)
-lp.shrunk.full &lt;- shrinkage.factor*lp.full
-full.extra &lt;- lrm.fit(y=mice::complete(imputed.data, m)$HypoP,
-                      offset=lp.shrunk.full)
-full.intercept.extra &lt;- coef(full.extra)[1]
-full.intercept.shrunk &lt;- shrinkage.factor*full.model$coefficients[&quot;Intercept&quot;]+full.intercept.extra
-
-# check
-mean(mice::complete(imputed.data, m)$HypoP==&quot;Yes&quot;) # event probability</code></pre>
-<pre><code>## [1] 0.12021858</code></pre>
-<pre class="r"><code>mean(plogis(lp.shrunk.full+full.intercept.extra))  # same</code></pre>
-<pre><code>## [1] 0.12021858</code></pre>
-<pre class="r"><code># save results
-an.full &lt;- stats::anova(full.model)
-coef.full.model &lt;- shrinkage.factor*summary(full.model, 
-                                            dPTH=c(0, 1),
-                                            CorrCa24u=c(0, 0.1),
-                                            BSKgezien=&quot;No&quot;)[which(summary(full.model)[, &quot;Type&quot;]==1), c(&quot;Effect&quot;)]
-Int.full.CI.lower &lt;- full.model$coefficients[&quot;Intercept&quot;]+qnorm(0.025)*sqrt(diag(full.model$var)[1])
-Int.full.CI.upper &lt;- full.model$coefficients[&quot;Intercept&quot;]+qnorm(0.975)*sqrt(diag(full.model$var)[1])
-CI.full.model &lt;- exp(rbind(c(shrinkage.factor*Int.full.CI.lower+full.intercept.extra, 
-                             shrinkage.factor*Int.full.CI.upper+full.intercept.extra), 
-                           shrinkage.factor*cbind(coef.full.model+qnorm(0.025)*sqrt(diag(full.model$var)[-1]),
-                                                  coef.full.model+qnorm(0.975)*sqrt(diag(full.model$var)[-1]))))
-OR.full.model &lt;- exp(c(full.intercept.shrunk, coef.full.model))</code></pre>
+<pre><code>##  Original C          : 0.90704404 
+##  Optimism            : 0.012429725 
+##  Mean bootstrapped C : 0.89461432 
+##  Optimism corrected C: 0.89461432</code></pre>
 </div>
 <div id="backward-selection" class="section level1">
 <h1>Backward selection</h1>
@@ -719,68 +701,91 @@ OR.full.model &lt;- exp(c(full.intercept.shrunk, coef.full.model))</code></pre>
   # Sex +
   # surgery_type +
   # CHKD
-final.model &lt;- lrm(form.final.model, data=mice::complete(imputed.data, m))
 
-# new intercept after shrinkage
-lp.final &lt;- predict(final.model)
-lp.shrunk.final &lt;- shrinkage.factor*lp.final
-final.extra &lt;- lrm.fit(y=mice::complete(imputed.data, m)$HypoP,
-                      offset=lp.shrunk.final)
-final.intercept.extra &lt;- coef(final.extra)[1]
-final.intercept.shrunk &lt;- shrinkage.factor*final.model$coefficients[&quot;Intercept&quot;]+final.intercept.extra
-
-# check
-mean(mice::complete(imputed.data, m)$HypoP==&quot;Yes&quot;) # event probability</code></pre>
-<pre><code>## [1] 0.12021858</code></pre>
-<pre class="r"><code>mean(plogis(lp.shrunk.final+final.intercept.extra))  # same</code></pre>
-<pre><code>## [1] 0.12021858</code></pre>
-<pre class="r"><code># save results
-an.final &lt;- stats::anova(final.model)
-coef.final.model &lt;- shrinkage.factor*summary(final.model, 
-                                            dPTH=c(0, 1),
-                                            CorrCa24u=c(0, 0.1),
-                                            BSKgezien=&quot;No&quot;)[which(summary(final.model)[, &quot;Type&quot;]==1), c(&quot;Effect&quot;)]
-Int.CI.lower &lt;- final.model$coefficients[&quot;Intercept&quot;]+qnorm(0.025)*sqrt(diag(final.model$var)[1])
-Int.CI.upper &lt;- final.model$coefficients[&quot;Intercept&quot;]+qnorm(0.975)*sqrt(diag(final.model$var)[1])
-CI.final.model &lt;- exp(rbind(c(shrinkage.factor*Int.CI.lower+final.intercept.extra, 
-                              shrinkage.factor*Int.CI.upper+final.intercept.extra),
-                            shrinkage.factor*cbind(coef.final.model+qnorm(0.025)*sqrt(diag(final.model$var)[-1]),
-                                                   coef.final.model+qnorm(0.975)*sqrt(diag(final.model$var)[-1]))))
-OR.final.model &lt;- exp(c(final.intercept.shrunk, coef.final.model))</code></pre>
+# multiple imputation model
+final.model &lt;- Hmisc::fit.mult.impute(form.final.model, lrm, 
+                                          xtrans=imputed.data,
+                                          data=work.data,
+                                          n.impute=m, pr=FALSE, fit.reps=TRUE, 
+                                          fitargs=list(y=TRUE, x=TRUE, se.fit=TRUE))</code></pre>
 </div>
 <div id="simple-model" class="section level1">
 <h1>Simple model</h1>
-<pre class="r"><code>simple.model &lt;- rms::lrm(HypoP ~ dPTH, data=mice::complete(imputed.data, m))
-
-# new intercept after shrinkage
-lp.simple &lt;- predict(simple.model)
-lp.shrunk.simple &lt;- shrinkage.factor*lp.simple
-simple.extra &lt;- lrm.fit(y=mice::complete(imputed.data, m)$HypoP,
-                      offset=lp.shrunk.simple)
-simple.intercept.extra &lt;- coef(simple.extra)[1]
-simple.intercept.shrunk &lt;- shrinkage.factor*simple.model$coefficients[&quot;Intercept&quot;]+simple.intercept.extra
-
-# check
-mean(mice::complete(imputed.data, m)$HypoP==&quot;Yes&quot;) # event probability</code></pre>
-<pre><code>## [1] 0.12021858</code></pre>
-<pre class="r"><code>mean(plogis(lp.shrunk.simple+simple.intercept.extra))  # same</code></pre>
-<pre><code>## [1] 0.12021858</code></pre>
-<pre class="r"><code># save results
-an.simple &lt;- stats::anova(simple.model)
-coef.simple.model &lt;- shrinkage.factor*summary(simple.model, 
-                                              dPTH=c(0, 1))[which(summary(simple.model)[, &quot;Type&quot;]==1), c(&quot;Effect&quot;)]
-Int.simple.CI.lower &lt;- simple.model$coefficients[&quot;Intercept&quot;]+qnorm(0.025)*sqrt(diag(simple.model$var)[1])
-Int.simple.CI.upper &lt;- simple.model$coefficients[&quot;Intercept&quot;]+qnorm(0.975)*sqrt(diag(simple.model$var)[1])
-CI.simple.model &lt;- exp(rbind(c(shrinkage.factor*Int.simple.CI.lower+simple.intercept.extra, 
-                               shrinkage.factor*Int.simple.CI.upper+simple.intercept.extra),
-                             shrinkage.factor*cbind(coef.simple.model+qnorm(0.025)*sqrt(diag(simple.model$var)[-1]),
-                                                    coef.simple.model+qnorm(0.975)*sqrt(diag(simple.model$var)[-1]))))
-OR.simple.model &lt;- exp(c(simple.intercept.shrunk, coef.simple.model))</code></pre>
+<pre class="r"><code>simple.model &lt;- Hmisc::fit.mult.impute(HypoP ~ dPTH, lrm, 
+                                          xtrans=imputed.data,
+                                          data=work.data,
+                                          n.impute=m, pr=FALSE, fit.reps=TRUE, 
+                                          fitargs=list(y=TRUE, x=TRUE, se.fit=TRUE))</code></pre>
+</div>
+<div id="save-results-of-full-model" class="section level1">
+<h1>Save results of full model</h1>
+<pre class="r"><code>model.types &lt;- c(&quot;full&quot;, &quot;final&quot;, &quot;simple&quot;)
+for (model.type in model.types){
+  # new intercept after shrinkage
+  fitted.model &lt;- eval(parse(text=paste0(model.type, &quot;.model&quot;)))
+  lp &lt;- predict(fitted.model)
+  lp.shrunk &lt;- shrinkage.factor*lp
+  fit.extra &lt;- lrm.fit(y=mice::complete(imputed.data, m.choose)$HypoP,
+                        offset=lp.shrunk) # TODO: for each imputation?
+  intercept.extra &lt;- coef(fit.extra)[1]
+  intercept.shrunk &lt;- shrinkage.factor*fitted.model$coefficients[&quot;Intercept&quot;]+intercept.extra
+  
+  # check
+  mean(mice::complete(imputed.data, m.choose)$HypoP==&quot;Yes&quot;) # event probability
+  mean(plogis(lp.shrunk+intercept.extra))  # same
+  
+  # save results
+  if (model.type==&quot;simple&quot;){
+    summary.model &lt;- summary(fitted.model, 
+                           dPTH=c(0, 1))[which(summary(fitted.model)[, &quot;Type&quot;]==1), 
+                                           c(&quot;Effect&quot;)]
+    
+  } else{
+    summary.model &lt;- summary(fitted.model, 
+                           dPTH=c(0, 1),
+                           CorrCa24u=c(0, 0.1),
+                           BSKgezien=&quot;No&quot;)[which(summary(fitted.model)[, &quot;Type&quot;]==1), 
+                                           c(&quot;Effect&quot;)]
+  }
+  
+  # save results
+  assign(paste0(model.type, &quot;.intercept.shrunk&quot;), intercept.shrunk)
+  
+  an &lt;- stats::anova(fitted.model)
+  assign(paste0(&quot;an.&quot;, model.type), an)
+  
+  coef.model &lt;- shrinkage.factor*summary.model
+  assign(paste0(&quot;coef.&quot;, model.type, &quot;.model&quot;), coef.model)
+  
+  Int.CI.lower &lt;- fitted.model$coefficients[&quot;Intercept&quot;]+qnorm(0.025)*sqrt(diag(fitted.model$var)[1])
+  assign(paste0(&quot;Int.&quot;, model.type, &quot;.CI.lower&quot;), Int.CI.lower)
+  
+  Int.CI.upper &lt;- fitted.model$coefficients[&quot;Intercept&quot;]+qnorm(0.975)*sqrt(diag(fitted.model$var)[1])
+  assign(paste0(&quot;Int.&quot;, model.type, &quot;.CI.upper&quot;), Int.CI.upper)
+  
+  assign(paste0(&quot;CI.&quot;, model.type, &quot;.model&quot;), 
+                exp(rbind(c(shrinkage.factor*Int.CI.lower+intercept.extra,
+                            shrinkage.factor*Int.CI.upper+intercept.extra),
+                          shrinkage.factor*cbind(coef.model+qnorm(0.025)*sqrt(diag(fitted.model$var)[-1]),
+                                                 coef.model+qnorm(0.975)*sqrt(diag(fitted.model$var)[-1])))))
+  
+  assign(paste0(&quot;OR.&quot;, model.type, &quot;.model&quot;), 
+         exp(c(intercept.shrunk, coef.model)))
+}</code></pre>
 </div>
 <div id="assess-performance" class="section level1">
 <h1>Assess performance</h1>
-<pre class="r"><code># only dPTH
-lp.simple &lt;- predict(simple.model, newdata=mice::complete(imputed.data, m))
+<pre class="r"><code># make predictions for each imputation
+lp.simple &lt;- c()
+lp.final &lt;- c()
+lp.full &lt;- c()
+for (i in 1:m){
+  lp.simple &lt;- cbind(lp.simple, predict(simple.model, newdata=mice::complete(imputed.data, i))) # TODO: apply shrinkage factor?a
+  lp.final &lt;- cbind(lp.final, predict(final.model, newdata=mice::complete(imputed.data, i)))
+  lp.full &lt;- cbind(lp.full, predict(full.model, newdata=mice::complete(imputed.data, i)))
+}
+
+# simple model
 png(file=paste0(file.path, &quot;Results/model.performance.simple.model.png&quot;), 
     width=400, height=400, units=&quot;px&quot;)
 out.simple &lt;- PredictionTools::val.prob.mi(lp.mi=lp.simple, y=as.numeric(work.data$HypoP)-1, dist=TRUE)
@@ -793,9 +798,8 @@ grDevices::dev.off()</code></pre>
 ## Model 2: HypoP ~ dPTH + BSKgezien + CorrCa24u
 ## 
 ##    L.R. Chisq          d.f.             P 
-## 1.4360671e+01 2.0000000e+00 7.6141227e-04</code></pre>
+## 1.8000695e+01 2.0000000e+00 1.2336691e-04</code></pre>
 <pre class="r"><code># final model
-lp.final &lt;- predict(final.model, newdata=mice::complete(imputed.data, m))
 png(file=paste0(file.path, &quot;Results/model.performance.final.model.png&quot;), 
     width=400, height=400, units=&quot;px&quot;)
 out.final &lt;- PredictionTools::val.prob.mi(lp.mi=lp.final, y=as.numeric(work.data$HypoP)-1, dist=TRUE)
@@ -809,9 +813,8 @@ grDevices::dev.off()</code></pre>
 ##     CHKD
 ## 
 ## L.R. Chisq       d.f.          P 
-## 1.44822304 4.00000000 0.83577181</code></pre>
+## 1.25705767 4.00000000 0.86861805</code></pre>
 <pre class="r"><code># full model
-lp.full &lt;- predict(full.model, newdata=mice::complete(imputed.data, m))
 png(file=paste0(file.path, &quot;Results/model.performance.full.model.png&quot;), 
     width=400, height=400, units=&quot;px&quot;)
 out.full &lt;- PredictionTools::val.prob.mi(lp.mi=lp.full, y=as.numeric(work.data$HypoP)-1, dist=TRUE)
@@ -863,10 +866,8 @@ table(work.data$Validatie1)</code></pre>
 ## Buiten_regio   EMC_na2017 EMC_voor2017        Regio 
 ##           62          110          116           78</code></pre>
 <pre class="r"><code>Centers &lt;- levels(work.data$Validatie1)
-cuts &lt;- 5
-single.imputed.data &lt;- mice::complete(imputed.data, m)
+single.imputed.data &lt;- mice::complete(imputed.data, m.choose) # TODO: for each imputation?
 for (type in c(&quot;full&quot;, &quot;final&quot;)){
-  cat(&quot;Now fitting&quot;, type)
   for (j in 1:4){
     # split outcomes for center j and not j
     y.j &lt;- as.numeric(work.data$HypoP[work.data$Validatie1==Centers[j]])-1
@@ -877,265 +878,39 @@ for (type in c(&quot;full&quot;, &quot;final&quot;)){
     form.notj &lt;- update(form.model, y.notj  ~ . )
     
     # fit on 3 centers
-    # DISCUSS with David: glm.fit: fitted probabilities numerically 0 or 1 occurred (EMC_voor2017 full model, EMC_na2017 en EMC_voor2017 final model)
-    model.notj &lt;- glm(form.notj, data=single.imputed.data[work.data$Validatie1!=Centers[j],], family=&quot;binomial&quot;)
-    print(summary(model.notj))
-
+    model.notj &lt;- rms::lrm(form.notj, data=single.imputed.data[work.data$Validatie1!=Centers[j],], x=TRUE, y=TRUE)
+    
+    # TODO: calculate shrinkage?
+    # v&lt;-rms::validate(model.notj,method=&quot;boot&quot;,bw=TRUE,rule=&quot;p&quot;,sls=0.05,B=100,pr=FALSE,type=&quot;individual&quot;)
+    # shrinkage.factor.notj &lt;- v[&quot;Slope&quot;,&quot;test&quot;]
+    
+    # cat(&quot;Now calculating for center&quot;, Centers[j], &quot;\n&quot;)
+    # print(model.notj$coefficients)
+    # print(shrinkage.factor.notj)
+    
     # make prediction for 1 center
-    cat(&quot;for center&quot;, Centers[j], &quot;\n&quot;)
     lp.j &lt;- predict(model.notj, newdata=single.imputed.data[work.data$Validatie1==Centers[j],])
 
     # make plot
-    png(file=paste0(file.path, &quot;Results/Figures/model.performance.&quot;, Centers[j], &quot;.png&quot;))
+    png(file=paste0(file.path, &quot;Results/Figures/model.performance.&quot;, type, &quot;.&quot;, Centers[j], &quot;.png&quot;))
     out.j &lt;- PredictionTools::val.prob.mi(lp.mi=lp.j, y=y.j, main=Centers[j], g=3, dist=TRUE)
     grDevices::dev.off()
   }
-}</code></pre>
-<pre><code>## Now fitting full
-## Call:
-## glm(formula = form.notj, family = &quot;binomial&quot;, data = single.imputed.data[work.data$Validatie1 != 
-##     Centers[j], ])
-## 
-## Deviance Residuals: 
-##       Min         1Q     Median         3Q        Max  
-## -1.600956  -0.376988  -0.124055  -0.034427   2.362381  
-## 
-## Coefficients:
-##                     Estimate Std. Error z value  Pr(&gt;|z|)    
-## (Intercept)        1.6284391  3.9571551  0.4115 0.6806930    
-## dPTH               0.0848941  0.0221001  3.8413 0.0001224 ***
-## BSKgezienYes      -1.3609892  0.5345456 -2.5461 0.0108944 *  
-## CorrCa24u         -4.6215292  1.6671401 -2.7721 0.0055691 ** 
-## Age_Years          0.0077177  0.0156022  0.4947 0.6208448    
-## SexMale           -0.0234064  0.4809512 -0.0487 0.9611848    
-## surgery_typetotal -0.8027418  0.6951649 -1.1548 0.2481927    
-## CHKDYes            0.4841685  0.4990398  0.9702 0.3319468    
-## ---
-## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
-## 
-## (Dispersion parameter for binomial family taken to be 1)
-## 
-##     Null deviance: 204.589  on 303  degrees of freedom
-## Residual deviance: 131.760  on 296  degrees of freedom
-## AIC: 147.76
-## 
-## Number of Fisher Scoring iterations: 8
-## 
-## for center Buiten_regio</code></pre>
-<pre><code>## 
-## Call:
-## glm(formula = form.notj, family = &quot;binomial&quot;, data = single.imputed.data[work.data$Validatie1 != 
-##     Centers[j], ])
-## 
-## Deviance Residuals: 
-##       Min         1Q     Median         3Q        Max  
-## -1.644311  -0.440931  -0.140918  -0.040605   2.254948  
-## 
-## Coefficients:
-##                    Estimate Std. Error z value  Pr(&gt;|z|)    
-## (Intercept)       -1.760716   3.921468 -0.4490   0.65344    
-## dPTH               0.083845   0.020087  4.1741 2.992e-05 ***
-## BSKgezienYes      -1.010783   0.574289 -1.7601   0.07840 .  
-## CorrCa24u         -3.095972   1.613002 -1.9194   0.05494 .  
-## Age_Years          0.011606   0.014801  0.7842   0.43295    
-## SexMale           -0.166388   0.517072 -0.3218   0.74761    
-## surgery_typetotal -0.303272   0.743318 -0.4080   0.68328    
-## CHKDYes            0.638576   0.513932  1.2425   0.21404    
-## ---
-## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
-## 
-## (Dispersion parameter for binomial family taken to be 1)
-## 
-##     Null deviance: 204.269  on 255  degrees of freedom
-## Residual deviance: 132.849  on 248  degrees of freedom
-## AIC: 148.849
-## 
-## Number of Fisher Scoring iterations: 7
-## 
-## for center EMC_na2017</code></pre>
-<pre><code>## 
-## Call:
-## glm(formula = form.notj, family = &quot;binomial&quot;, data = single.imputed.data[work.data$Validatie1 != 
-##     Centers[j], ])
-## 
-## Deviance Residuals: 
-##       Min         1Q     Median         3Q        Max  
-## -1.609329  -0.415735  -0.131737  -0.031213   2.361875  
-## 
-## Coefficients:
-##                    Estimate Std. Error z value  Pr(&gt;|z|)    
-## (Intercept)        2.714507   4.117564  0.6593 0.5097349    
-## dPTH               0.083888   0.021731  3.8603 0.0001132 ***
-## BSKgezienYes      -1.228100   0.669541 -1.8342 0.0666182 .  
-## CorrCa24u         -5.211334   1.765690 -2.9514 0.0031629 ** 
-## Age_Years          0.021202   0.016811  1.2613 0.2072158    
-## SexMale           -0.244667   0.518463 -0.4719 0.6369921    
-## surgery_typetotal -0.835988   0.752988 -1.1102 0.2669005    
-## CHKDYes           -0.072510   0.519942 -0.1395 0.8890885    
-## ---
-## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
-## 
-## (Dispersion parameter for binomial family taken to be 1)
-## 
-##     Null deviance: 179.439  on 249  degrees of freedom
-## Residual deviance: 115.485  on 242  degrees of freedom
-## AIC: 131.485
-## 
-## Number of Fisher Scoring iterations: 8
-## 
-## for center EMC_voor2017</code></pre>
-<pre><code>## 
-## Call:
-## glm(formula = form.notj, family = &quot;binomial&quot;, data = single.imputed.data[work.data$Validatie1 != 
-##     Centers[j], ])
-## 
-## Deviance Residuals: 
-##       Min         1Q     Median         3Q        Max  
-## -1.792455  -0.436546  -0.108960  -0.019102   2.268770  
-## 
-## Coefficients:
-##                     Estimate Std. Error z value  Pr(&gt;|z|)    
-## (Intercept)       -3.2107578  4.0558565 -0.7916  0.428574    
-## dPTH               0.0966523  0.0228844  4.2235 2.405e-05 ***
-## BSKgezienYes      -1.7321361  0.6128610 -2.8263  0.004709 ** 
-## CorrCa24u         -2.9952617  1.6241484 -1.8442  0.065153 .  
-## Age_Years          0.0046507  0.0154874  0.3003  0.763957    
-## SexMale            0.2183795  0.4526948  0.4824  0.629523    
-## surgery_typetotal  0.6956929  0.9680770  0.7186  0.472367    
-## CHKDYes            0.2318210  0.4689291  0.4944  0.621050    
-## ---
-## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
-## 
-## (Dispersion parameter for binomial family taken to be 1)
-## 
-##     Null deviance: 217.020  on 287  degrees of freedom
-## Residual deviance: 136.826  on 280  degrees of freedom
-## AIC: 152.826
-## 
-## Number of Fisher Scoring iterations: 8
-## 
-## for center Regio</code></pre>
-<pre><code>## Now fitting final
-## Call:
-## glm(formula = form.notj, family = &quot;binomial&quot;, data = single.imputed.data[work.data$Validatie1 != 
-##     Centers[j], ])
-## 
-## Deviance Residuals: 
-##       Min         1Q     Median         3Q        Max  
-## -1.671608  -0.399628  -0.128924  -0.040182   2.503756  
-## 
-## Coefficients:
-##               Estimate Std. Error z value  Pr(&gt;|z|)    
-## (Intercept)   0.741678   3.792626  0.1956  0.844956    
-## dPTH          0.083867   0.020797  4.0326 5.517e-05 ***
-## BSKgezienYes -1.481521   0.519682 -2.8508  0.004361 ** 
-## CorrCa24u    -4.093991   1.549445 -2.6422  0.008236 ** 
-## ---
-## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
-## 
-## (Dispersion parameter for binomial family taken to be 1)
-## 
-##     Null deviance: 204.589  on 303  degrees of freedom
-## Residual deviance: 133.843  on 300  degrees of freedom
-## AIC: 141.843
-## 
-## Number of Fisher Scoring iterations: 8
-## 
-## for center Buiten_regio</code></pre>
-<pre><code>## 
-## Call:
-## glm(formula = form.notj, family = &quot;binomial&quot;, data = single.imputed.data[work.data$Validatie1 != 
-##     Centers[j], ])
-## 
-## Deviance Residuals: 
-##       Min         1Q     Median         3Q        Max  
-## -1.567136  -0.448970  -0.148824  -0.040704   2.326580  
-## 
-## Coefficients:
-##               Estimate Std. Error z value  Pr(&gt;|z|)    
-## (Intercept)  -2.297857   3.747282 -0.6132   0.53974    
-## dPTH          0.085978   0.019291  4.4569 8.315e-06 ***
-## BSKgezienYes -1.039074   0.549215 -1.8919   0.05850 .  
-## CorrCa24u    -2.597908   1.516340 -1.7133   0.08666 .  
-## ---
-## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
-## 
-## (Dispersion parameter for binomial family taken to be 1)
-## 
-##     Null deviance: 204.269  on 255  degrees of freedom
-## Residual deviance: 135.187  on 252  degrees of freedom
-## AIC: 143.187
-## 
-## Number of Fisher Scoring iterations: 7
-## 
-## for center EMC_na2017</code></pre>
-<pre><code>## 
-## Call:
-## glm(formula = form.notj, family = &quot;binomial&quot;, data = single.imputed.data[work.data$Validatie1 != 
-##     Centers[j], ])
-## 
-## Deviance Residuals: 
-##       Min         1Q     Median         3Q        Max  
-## -1.841104  -0.424133  -0.141706  -0.032667   2.454502  
-## 
-## Coefficients:
-##               Estimate Std. Error z value  Pr(&gt;|z|)    
-## (Intercept)   2.655675   3.925490  0.6765  0.498710    
-## dPTH          0.080314   0.019867  4.0426 5.286e-05 ***
-## BSKgezienYes -1.364027   0.671340 -2.0318  0.042174 *  
-## CorrCa24u    -4.788787   1.678080 -2.8537  0.004321 ** 
-## ---
-## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
-## 
-## (Dispersion parameter for binomial family taken to be 1)
-## 
-##     Null deviance: 179.439  on 249  degrees of freedom
-## Residual deviance: 118.535  on 246  degrees of freedom
-## AIC: 126.535
-## 
-## Number of Fisher Scoring iterations: 8
-## 
-## for center EMC_voor2017</code></pre>
-<pre><code>## 
-## Call:
-## glm(formula = form.notj, family = &quot;binomial&quot;, data = single.imputed.data[work.data$Validatie1 != 
-##     Centers[j], ])
-## 
-## Deviance Residuals: 
-##       Min         1Q     Median         3Q        Max  
-## -1.600481  -0.453791  -0.113273  -0.021764   2.362728  
-## 
-## Coefficients:
-##              Estimate Std. Error z value  Pr(&gt;|z|)    
-## (Intercept)  -2.82020    3.94831 -0.7143  0.475054    
-## dPTH          0.10115    0.02258  4.4797 7.475e-06 ***
-## BSKgezienYes -1.66531    0.56831 -2.9303  0.003387 ** 
-## CorrCa24u    -2.84504    1.56965 -1.8125  0.069904 .  
-## ---
-## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
-## 
-## (Dispersion parameter for binomial family taken to be 1)
-## 
-##     Null deviance: 217.020  on 287  degrees of freedom
-## Residual deviance: 138.351  on 284  degrees of freedom
-## AIC: 146.351
-## 
-## Number of Fisher Scoring iterations: 8
-## 
-## for center Regio</code></pre>
-<pre class="r"><code># combine 4 calibration plots into one
-png(file=paste0(file.path, &quot;Results/leave.one.out.cross.validation.png&quot;), width=16, height=16, units=&quot;cm&quot;, res=300)
-par(mar=rep(0, 4))
-layout(matrix(1:4, ncol=2, byrow=TRUE))
-Centers.val &lt;- rep(1:4, 3)
-for (i in 1:4){
-  plot(NA, xlim=0:1, ylim=0:1, xaxt=&quot;n&quot;, yaxt=&quot;n&quot;, bty=&quot;n&quot;)
-  img &lt;- png::readPNG(paste0(file.path, &quot;Results/Figures/model.performance.&quot;, Centers[Centers.val[i]], &quot;.png&quot;))
-  rasterImage(img, 0, 0, 1, 1)
 }
-grDevices::dev.off()</code></pre>
-<pre><code>## png 
-##   2</code></pre>
+
+# combine 4 calibration plots into one
+for (type in c(&quot;full&quot;, &quot;final&quot;)){
+  png(file=paste0(file.path, &quot;Results/leave.one.out.cross.validation.&quot;, type, &quot;.png&quot;), width=16, height=16, units=&quot;cm&quot;, res=300)
+  par(mar=rep(0, 4))
+  layout(matrix(1:4, ncol=2, byrow=TRUE))
+  Centers.val &lt;- rep(1:4, 3)
+  for (i in 1:4){
+    plot(NA, xlim=0:1, ylim=0:1, xaxt=&quot;n&quot;, yaxt=&quot;n&quot;, bty=&quot;n&quot;)
+    img &lt;- png::readPNG(paste0(file.path, &quot;Results/Figures/model.performance.&quot;, type, &quot;.&quot;, Centers[Centers.val[i]], &quot;.png&quot;))
+    rasterImage(img, 0, 0, 1, 1)
+  }
+  grDevices::dev.off()
+}</code></pre>
 </div>
 
 
