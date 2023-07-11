@@ -381,7 +381,7 @@ library(rms)</code></pre>
 </div>
 <div id="load-data" class="section level1">
 <h1>Load data</h1>
-<pre class="r"><code>file.path &lt;- &quot;Z:/Project Predict Hypoparathyroidism/&quot;
+<pre class="r"><code>file.path &lt;- &quot;Z:/Project Predict Hypoparathyroidism/Development/&quot;
 original.data &lt;- read.csv(paste0(file.path, &quot;Data/Data.csv&quot;), 
                  stringsAsFactors=TRUE,
                  header = T, sep = &quot;;&quot;, dec = &quot;.&quot;, 
@@ -495,6 +495,7 @@ imputed.data &lt;- as.mids(mi_long)
 
 # set data distributions
 single.imputation &lt;- mice::complete(imputed.data, m.choose)
+
 dd&lt;-rms::datadist(single.imputation)
 options(datadist=&#39;dd&#39;)
 options(digits=8)</code></pre>
@@ -680,7 +681,9 @@ v &lt;- rms::validate(full.model, method=&quot;boot&quot;, bw=TRUE, rule=&quot;p
 shrinkage.factor &lt;- v[&quot;Slope&quot;,&quot;test&quot;]
 cat(&quot;Shrinkage factor     :&quot;, shrinkage.factor, &quot;\n&quot;)</code></pre>
 <pre><code>## Shrinkage factor     : 0.87402286</code></pre>
-<pre class="r"><code># Optimism corrected C-index
+<pre class="r"><code>save(shrinkage.factor, work.data, imputed.data, single.imputation, file=paste0(file.path, &quot;/Data/test.Rdata&quot;))
+
+# Optimism corrected C-index
 cindex.orig&lt;-(v[&quot;Dxy&quot;,&quot;index.orig&quot;]+1)/2   # original C-index
 optimism.C&lt;-v[&quot;Dxy&quot;,&quot;optimism&quot;]/2          # optimism C-index, /2 because  C.orig - C.B the +1 cancels out
 cindex.B&lt;-(v[&quot;Dxy&quot;,&quot;index.corrected&quot;]+1)/2 # index corrected C-index
@@ -772,7 +775,17 @@ for (model.type in model.types){
   
   assign(paste0(&quot;OR.&quot;, model.type, &quot;.model&quot;), 
          exp(c(intercept.shrunk, coef.model)))
-}</code></pre>
+}
+
+coef.final.model.webapp &lt;- shrinkage.factor*summary(final.model, 
+                                   dPTH=c(1, 2), 
+                                   CorrCa24u=c(1, 2), 
+                                   BSKgezien=&quot;No&quot;)[which(summary(final.model)[, &quot;Type&quot;]==1), 
+                                                   c(&quot;Effect&quot;)]
+save(shrinkage.factor,
+     final.intercept.shrunk,  
+     coef.final.model.webapp, 
+     file=paste0(file.path, &quot;/Results/final.model.Rdata&quot;))</code></pre>
 </div>
 <div id="assess-performance" class="section level1">
 <h1>Assess performance</h1>
@@ -781,7 +794,7 @@ lp.simple &lt;- c()
 lp.final &lt;- c()
 lp.full &lt;- c()
 for (i in 1:m){
-  lp.simple &lt;- cbind(lp.simple, predict(simple.model, newdata=mice::complete(imputed.data, i))) # TODO: apply shrinkage factor?a
+  lp.simple &lt;- cbind(lp.simple, predict(simple.model, newdata=mice::complete(imputed.data, i))) # TODO: apply shrinkage factor?
   lp.final &lt;- cbind(lp.final, predict(final.model, newdata=mice::complete(imputed.data, i)))
   lp.full &lt;- cbind(lp.full, predict(full.model, newdata=mice::complete(imputed.data, i)))
 }
@@ -920,17 +933,24 @@ table(single.imputation$Readmission, high.dPTH)</code></pre>
 ##         0   1
 ##   No  213 126
 ##   Yes   0  27</code></pre>
-<pre class="r"><code>pred &lt;- predict(final.model, newdata=single.imputation, type=&quot;fitted&quot;)
+<pre class="r"><code>pred &lt;- predict(final.model, newdata=single.imputation, type=&quot;fitted&quot;) # TOOD; change to shrunk model
+
+lp &lt;- final.intercept.shrunk+
+        coef.final.model.webapp[&quot;dPTH&quot;]*single.imputation$dPTH+
+        coef.final.model.webapp[&quot;CorrCa24u&quot;]*single.imputation$CorrCa24u+
+        coef.final.model.webapp[&quot;BSKgezien - Yes:No&quot;]*ifelse(single.imputation$BSKgezien == &quot;Yes&quot;, 1, 0)
+pred &lt;- exp(lp)/(1+exp(lp))
+      
 tri.pred &lt;- ifelse(pred&lt;0.1, 1, ifelse(pred&gt;0.3, 3, 2))
 table(single.imputation$Readmission, tri.pred)</code></pre>
 <pre><code>##      tri.pred
 ##         1   2   3
-##   No  239  56  44
+##   No  232  62  45
 ##   Yes   3   6  18</code></pre>
 <pre class="r"><code>table(single.imputation$HypoP, tri.pred)</code></pre>
 <pre><code>##      tri.pred
 ##         1   2   3
-##   No  236  50  36
+##   No  229  56  37
 ##   Yes   6  12  26</code></pre>
 </div>
 

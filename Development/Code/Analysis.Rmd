@@ -27,7 +27,7 @@ library(rms)
 
 # Load data
 ```{r, eval=TRUE, echo=TRUE, message=FALSE, warning=FALSE}
-file.path <- "Z:/Project Predict Hypoparathyroidism/"
+file.path <- "Z:/Project Predict Hypoparathyroidism/Development/"
 original.data <- read.csv(paste0(file.path, "Data/Data.csv"), 
                  stringsAsFactors=TRUE,
                  header = T, sep = ";", dec = ".", 
@@ -107,6 +107,7 @@ imputed.data <- as.mids(mi_long)
 
 # set data distributions
 single.imputation <- mice::complete(imputed.data, m.choose)
+
 dd<-rms::datadist(single.imputation)
 options(datadist='dd')
 options(digits=8)
@@ -223,6 +224,7 @@ v <- rms::validate(full.model, method="boot", bw=TRUE, rule="p", sls=0.05, B=100
 # Show shrinkage factor
 shrinkage.factor <- v["Slope","test"]
 cat("Shrinkage factor     :", shrinkage.factor, "\n")
+save(shrinkage.factor, work.data, imputed.data, single.imputation, file=paste0(file.path, "/Data/test.Rdata"))
 
 # Optimism corrected C-index
 cindex.orig<-(v["Dxy","index.orig"]+1)/2   # original C-index
@@ -316,6 +318,16 @@ for (model.type in model.types){
   assign(paste0("OR.", model.type, ".model"), 
          exp(c(intercept.shrunk, coef.model)))
 }
+
+coef.final.model.webapp <- shrinkage.factor*summary(final.model, 
+                                   dPTH=c(1, 2), 
+                                   CorrCa24u=c(1, 2), 
+                                   BSKgezien="No")[which(summary(final.model)[, "Type"]==1), 
+                                                   c("Effect")]
+save(shrinkage.factor,
+     final.intercept.shrunk,  
+     coef.final.model.webapp, 
+     file=paste0(file.path, "/Results/final.model.Rdata"))
 ```
 
 # Assess performance
@@ -325,7 +337,7 @@ lp.simple <- c()
 lp.final <- c()
 lp.full <- c()
 for (i in 1:m){
-  lp.simple <- cbind(lp.simple, predict(simple.model, newdata=mice::complete(imputed.data, i))) # TODO: apply shrinkage factor?a
+  lp.simple <- cbind(lp.simple, predict(simple.model, newdata=mice::complete(imputed.data, i))) # TODO: apply shrinkage factor?
   lp.final <- cbind(lp.final, predict(final.model, newdata=mice::complete(imputed.data, i)))
   lp.full <- cbind(lp.full, predict(full.model, newdata=mice::complete(imputed.data, i)))
 }
@@ -442,7 +454,14 @@ for (type in c("full", "final")){
 high.dPTH <- ifelse(single.imputation$dPTH>70, 1, 0)
 table(single.imputation$Readmission, high.dPTH)
 
-pred <- predict(final.model, newdata=single.imputation, type="fitted")
+pred <- predict(final.model, newdata=single.imputation, type="fitted") # TOOD; change to shrunk model
+
+lp <- final.intercept.shrunk+
+        coef.final.model.webapp["dPTH"]*single.imputation$dPTH+
+        coef.final.model.webapp["CorrCa24u"]*single.imputation$CorrCa24u+
+        coef.final.model.webapp["BSKgezien - Yes:No"]*ifelse(single.imputation$BSKgezien == "Yes", 1, 0)
+pred <- exp(lp)/(1+exp(lp))
+      
 tri.pred <- ifelse(pred<0.1, 1, ifelse(pred>0.3, 3, 2))
 table(single.imputation$Readmission, tri.pred)
 table(single.imputation$HypoP, tri.pred)

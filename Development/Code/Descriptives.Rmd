@@ -12,7 +12,7 @@ cat("\014")
 library(arsenal)
 library(knitr)
 
-load("Z:/Project Predict Hypoparathyroidism/Data/data.to.be.imputed.Rdata")
+load("Z:/Project Predict Hypoparathyroidism/Development/Data/data.to.be.imputed.Rdata")
 
 # define variables
 work.data$dPTH <- ((work.data$BaselinePTH - work.data$PTH24u)/work.data$BaselinePTH*100)
