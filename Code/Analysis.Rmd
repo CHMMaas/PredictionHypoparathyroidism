@@ -106,11 +106,11 @@ mi_long$dCa24u <- ((mi_long$BaseCa - mi_long$Ca24u)/mi_long$BaseCa*100)
 imputed.data <- as.mids(mi_long)
 
 # set data distributions
-dd<-rms::datadist(mice::complete(imputed.data, m.choose))
+single.imputation <- mice::complete(imputed.data, m.choose)
+dd<-rms::datadist(single.imputation)
 options(datadist='dd')
 options(digits=8)
 ```
-
 # 1. Functional form - possible predictors
 ```{r, eval=TRUE, warning=FALSE}
 # include either PTH24u or dPTH
@@ -127,7 +127,7 @@ functional.forms <- list(
 model.AICs <- c()
 for (functional.form in functional.forms){
   form <- eval(parse(text=paste("HypoP ~", functional.form, "+ Age_Years + Sex + surgery_type + BSKgezien + CHKD")))
-  model <- rms::lrm(form, data=mice::complete(imputed.data, m.choose)) # SINGLE IMPUTATION
+  model <- rms::lrm(form, data=single.imputation) # SINGLE IMPUTATION
   model.AICs <- c(model.AICs, stats::AIC(model))
 }
 possible.predictors.df <- as.data.frame(cbind(functional.forms, sprintf("%.1f", model.AICs)))
@@ -149,7 +149,7 @@ form.flexible.model <- HypoP ~ rms::rcs(dPTH, 4) +
   surgery_type + 
   BSKgezien + 
   CHKD
-flexible.model <- rms::lrm(form.flexible.model, data=mice::complete(imputed.data, m.choose), 
+flexible.model <- rms::lrm(form.flexible.model, data=single.imputation, 
                            maxit=1000, x=TRUE, y=TRUE)
 grDevices::png(file=paste0(file.path, "Results/plot.Predict.png"))
 plot(Predict(flexible.model))
@@ -174,7 +174,7 @@ functional.forms <- list(
 model.AICs <- c()
 for (functional.form in functional.forms){
   form <- eval(parse(text=paste("HypoP ~", functional.form, "+ Sex + surgery_type + BSKgezien + CHKD")))
-  model <- rms::lrm(form, data=mice::complete(imputed.data, m.choose), # SINGLE IMPUTATION
+  model <- rms::lrm(form, data=single.imputation, # SINGLE IMPUTATION
                     maxit=1000, x=TRUE, y=TRUE)
   model.AICs <- c(model.AICs, stats::AIC(model))
 }
@@ -206,10 +206,10 @@ full.model <- Hmisc::fit.mult.impute(form.full.model, lrm,
 
 # Compare best flexible model with full model in single imputation
 ```{r, eval=TRUE}
-full.model.single <- rms::lrm(form.full.model, data=mice::complete(imputed.data, m.choose), # SINGLE IMPUTATION
+full.model.single <- rms::lrm(form.full.model, data=single.imputation, # SINGLE IMPUTATION
                               x=TRUE, y=TRUE)
 best.flexible.model <- rms::lrm(HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + Age_Years + Sex + surgery_type + BSKgezien + CHKD,
-                                data=mice::complete(imputed.data, m.choose), # SINGLE IMPUTATION
+                                data=single.imputation, # SINGLE IMPUTATION
                                 maxit=1000, x=TRUE, y=TRUE)
 lrtest(best.flexible.model, full.model.single)
 ```
@@ -269,13 +269,13 @@ for (model.type in model.types){
   fitted.model <- eval(parse(text=paste0(model.type, ".model")))
   lp <- predict(fitted.model)
   lp.shrunk <- shrinkage.factor*lp
-  fit.extra <- lrm.fit(y=mice::complete(imputed.data, m.choose)$HypoP,
+  fit.extra <- lrm.fit(y=single.imputation$HypoP,
                         offset=lp.shrunk) # TODO: for each imputation?
   intercept.extra <- coef(fit.extra)[1]
   intercept.shrunk <- shrinkage.factor*fitted.model$coefficients["Intercept"]+intercept.extra
   
   # check
-  mean(mice::complete(imputed.data, m.choose)$HypoP=="Yes") # event probability
+  mean(single.imputation$HypoP=="Yes") # event probability
   mean(plogis(lp.shrunk+intercept.extra))  # same
   
   # save results
@@ -392,7 +392,6 @@ openxlsx::write.xlsx(final.table,
 # 4 splits
 table(work.data$Validatie1)
 Centers <- levels(work.data$Validatie1)
-single.imputed.data <- mice::complete(imputed.data, m.choose) # TODO: for each imputation?
 for (type in c("full", "final")){
   for (j in 1:4){
     # split outcomes for center j and not j
@@ -404,7 +403,7 @@ for (type in c("full", "final")){
     form.notj <- update(form.model, y.notj  ~ . )
     
     # fit on 3 centers
-    model.notj <- rms::lrm(form.notj, data=single.imputed.data[work.data$Validatie1!=Centers[j],], x=TRUE, y=TRUE)
+    model.notj <- rms::lrm(form.notj, data=single.imputation[work.data$Validatie1!=Centers[j],], x=TRUE, y=TRUE)
     
     # TODO: calculate shrinkage?
     # v<-rms::validate(model.notj,method="boot",bw=TRUE,rule="p",sls=0.05,B=100,pr=FALSE,type="individual")
@@ -415,7 +414,7 @@ for (type in c("full", "final")){
     # print(shrinkage.factor.notj)
     
     # make prediction for 1 center
-    lp.j <- predict(model.notj, newdata=single.imputed.data[work.data$Validatie1==Centers[j],])
+    lp.j <- predict(model.notj, newdata=single.imputation[work.data$Validatie1==Centers[j],])
 
     # make plot
     png(file=paste0(file.path, "Results/Figures/model.performance.", type, ".", Centers[j], ".png"))
@@ -437,4 +436,14 @@ for (type in c("full", "final")){
   }
   grDevices::dev.off()
 }
+```
+# dPTH and readmission
+```{r, eval=TRUE}
+high.dPTH <- ifelse(single.imputation$dPTH>70, 1, 0)
+table(single.imputation$Readmission, high.dPTH)
+
+pred <- predict(final.model, newdata=single.imputation, type="fitted")
+tri.pred <- ifelse(pred<0.1, 1, ifelse(pred>0.3, 3, 2))
+table(single.imputation$Readmission, tri.pred)
+table(single.imputation$HypoP, tri.pred)
 ```

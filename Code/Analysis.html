@@ -494,7 +494,8 @@ mi_long$dCa24u &lt;- ((mi_long$BaseCa - mi_long$Ca24u)/mi_long$BaseCa*100)
 imputed.data &lt;- as.mids(mi_long)
 
 # set data distributions
-dd&lt;-rms::datadist(mice::complete(imputed.data, m.choose))
+single.imputation &lt;- mice::complete(imputed.data, m.choose)
+dd&lt;-rms::datadist(single.imputation)
 options(datadist=&#39;dd&#39;)
 options(digits=8)</code></pre>
 </div>
@@ -514,7 +515,7 @@ functional.forms &lt;- list(
 model.AICs &lt;- c()
 for (functional.form in functional.forms){
   form &lt;- eval(parse(text=paste(&quot;HypoP ~&quot;, functional.form, &quot;+ Age_Years + Sex + surgery_type + BSKgezien + CHKD&quot;)))
-  model &lt;- rms::lrm(form, data=mice::complete(imputed.data, m.choose)) # SINGLE IMPUTATION
+  model &lt;- rms::lrm(form, data=single.imputation) # SINGLE IMPUTATION
   model.AICs &lt;- c(model.AICs, stats::AIC(model))
 }
 possible.predictors.df &lt;- as.data.frame(cbind(functional.forms, sprintf(&quot;%.1f&quot;, model.AICs)))
@@ -545,7 +546,7 @@ form.flexible.model &lt;- HypoP ~ rms::rcs(dPTH, 4) +
   surgery_type + 
   BSKgezien + 
   CHKD
-flexible.model &lt;- rms::lrm(form.flexible.model, data=mice::complete(imputed.data, m.choose), 
+flexible.model &lt;- rms::lrm(form.flexible.model, data=single.imputation, 
                            maxit=1000, x=TRUE, y=TRUE)
 grDevices::png(file=paste0(file.path, &quot;Results/plot.Predict.png&quot;))
 plot(Predict(flexible.model))
@@ -571,7 +572,7 @@ functional.forms &lt;- list(
 model.AICs &lt;- c()
 for (functional.form in functional.forms){
   form &lt;- eval(parse(text=paste(&quot;HypoP ~&quot;, functional.form, &quot;+ Sex + surgery_type + BSKgezien + CHKD&quot;)))
-  model &lt;- rms::lrm(form, data=mice::complete(imputed.data, m.choose), # SINGLE IMPUTATION
+  model &lt;- rms::lrm(form, data=single.imputation, # SINGLE IMPUTATION
                     maxit=1000, x=TRUE, y=TRUE)
   model.AICs &lt;- c(model.AICs, stats::AIC(model))
 }
@@ -634,10 +635,10 @@ full.model &lt;- Hmisc::fit.mult.impute(form.full.model, lrm,
 <div id="compare-best-flexible-model-with-full-model-in-single-imputation" class="section level1">
 <h1>Compare best flexible model with full model in single
 imputation</h1>
-<pre class="r"><code>full.model.single &lt;- rms::lrm(form.full.model, data=mice::complete(imputed.data, m.choose), # SINGLE IMPUTATION
+<pre class="r"><code>full.model.single &lt;- rms::lrm(form.full.model, data=single.imputation, # SINGLE IMPUTATION
                               x=TRUE, y=TRUE)
 best.flexible.model &lt;- rms::lrm(HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + Age_Years + Sex + surgery_type + BSKgezien + CHKD,
-                                data=mice::complete(imputed.data, m.choose), # SINGLE IMPUTATION
+                                data=single.imputation, # SINGLE IMPUTATION
                                 maxit=1000, x=TRUE, y=TRUE)
 lrtest(best.flexible.model, full.model.single)</code></pre>
 <pre><code>## 
@@ -725,13 +726,13 @@ for (model.type in model.types){
   fitted.model &lt;- eval(parse(text=paste0(model.type, &quot;.model&quot;)))
   lp &lt;- predict(fitted.model)
   lp.shrunk &lt;- shrinkage.factor*lp
-  fit.extra &lt;- lrm.fit(y=mice::complete(imputed.data, m.choose)$HypoP,
+  fit.extra &lt;- lrm.fit(y=single.imputation$HypoP,
                         offset=lp.shrunk) # TODO: for each imputation?
   intercept.extra &lt;- coef(fit.extra)[1]
   intercept.shrunk &lt;- shrinkage.factor*fitted.model$coefficients[&quot;Intercept&quot;]+intercept.extra
   
   # check
-  mean(mice::complete(imputed.data, m.choose)$HypoP==&quot;Yes&quot;) # event probability
+  mean(single.imputation$HypoP==&quot;Yes&quot;) # event probability
   mean(plogis(lp.shrunk+intercept.extra))  # same
   
   # save results
@@ -866,7 +867,6 @@ table(work.data$Validatie1)</code></pre>
 ## Buiten_regio   EMC_na2017 EMC_voor2017        Regio 
 ##           62          110          116           78</code></pre>
 <pre class="r"><code>Centers &lt;- levels(work.data$Validatie1)
-single.imputed.data &lt;- mice::complete(imputed.data, m.choose) # TODO: for each imputation?
 for (type in c(&quot;full&quot;, &quot;final&quot;)){
   for (j in 1:4){
     # split outcomes for center j and not j
@@ -878,7 +878,7 @@ for (type in c(&quot;full&quot;, &quot;final&quot;)){
     form.notj &lt;- update(form.model, y.notj  ~ . )
     
     # fit on 3 centers
-    model.notj &lt;- rms::lrm(form.notj, data=single.imputed.data[work.data$Validatie1!=Centers[j],], x=TRUE, y=TRUE)
+    model.notj &lt;- rms::lrm(form.notj, data=single.imputation[work.data$Validatie1!=Centers[j],], x=TRUE, y=TRUE)
     
     # TODO: calculate shrinkage?
     # v&lt;-rms::validate(model.notj,method=&quot;boot&quot;,bw=TRUE,rule=&quot;p&quot;,sls=0.05,B=100,pr=FALSE,type=&quot;individual&quot;)
@@ -889,7 +889,7 @@ for (type in c(&quot;full&quot;, &quot;final&quot;)){
     # print(shrinkage.factor.notj)
     
     # make prediction for 1 center
-    lp.j &lt;- predict(model.notj, newdata=single.imputed.data[work.data$Validatie1==Centers[j],])
+    lp.j &lt;- predict(model.notj, newdata=single.imputation[work.data$Validatie1==Centers[j],])
 
     # make plot
     png(file=paste0(file.path, &quot;Results/Figures/model.performance.&quot;, type, &quot;.&quot;, Centers[j], &quot;.png&quot;))
@@ -911,6 +911,27 @@ for (type in c(&quot;full&quot;, &quot;final&quot;)){
   }
   grDevices::dev.off()
 }</code></pre>
+</div>
+<div id="dpth-and-readmission" class="section level1">
+<h1>dPTH and readmission</h1>
+<pre class="r"><code>high.dPTH &lt;- ifelse(single.imputation$dPTH&gt;70, 1, 0)
+table(single.imputation$Readmission, high.dPTH)</code></pre>
+<pre><code>##      high.dPTH
+##         0   1
+##   No  213 126
+##   Yes   0  27</code></pre>
+<pre class="r"><code>pred &lt;- predict(final.model, newdata=single.imputation, type=&quot;fitted&quot;)
+tri.pred &lt;- ifelse(pred&lt;0.1, 1, ifelse(pred&gt;0.3, 3, 2))
+table(single.imputation$Readmission, tri.pred)</code></pre>
+<pre><code>##      tri.pred
+##         1   2   3
+##   No  239  56  44
+##   Yes   3   6  18</code></pre>
+<pre class="r"><code>table(single.imputation$HypoP, tri.pred)</code></pre>
+<pre><code>##      tri.pred
+##         1   2   3
+##   No  236  50  36
+##   Yes   6  12  26</code></pre>
 </div>
 
 
