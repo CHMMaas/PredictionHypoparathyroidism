@@ -107,7 +107,6 @@ imputed.data <- as.mids(mi_long)
 
 # set data distributions
 single.imputation <- mice::complete(imputed.data, m.choose)
-
 dd<-rms::datadist(single.imputation)
 options(datadist='dd')
 options(digits=8)
@@ -127,7 +126,7 @@ functional.forms <- list(
   "dPTH + dCorrCa24u")
 model.AICs <- c()
 for (functional.form in functional.forms){
-  form <- eval(parse(text=paste("HypoP ~", functional.form, "+ Age_Years + Sex + surgery_type + BSKgezien + CHKD")))
+  form <- eval(parse(text=paste("HypoP ~", functional.form, "+ BSKgezien + Age_Years + Sex + surgery_type + CHKD")))
   model <- rms::lrm(form, data=single.imputation) # SINGLE IMPUTATION
   model.AICs <- c(model.AICs, stats::AIC(model))
 }
@@ -145,10 +144,10 @@ cat("Minimum AIC:", which(model.AICs==min(model.AICs)))
 # plot most flexible model
 form.flexible.model <- HypoP ~ rms::rcs(dPTH, 4) + 
   rms::rcs(CorrCa24u, 4) + 
+  BSKgezien + 
   rms::rcs(Age_Years, 4) + 
   Sex + 
   surgery_type + 
-  BSKgezien + 
   CHKD
 flexible.model <- rms::lrm(form.flexible.model, data=single.imputation, 
                            maxit=1000, x=TRUE, y=TRUE)
@@ -174,7 +173,7 @@ functional.forms <- list(
   "rms::rcs(dPTH, 4) + rms::rcs(CorrCa24u, 3) + rms::rcs(Age_Years, 3)") 
 model.AICs <- c()
 for (functional.form in functional.forms){
-  form <- eval(parse(text=paste("HypoP ~", functional.form, "+ Sex + surgery_type + BSKgezien + CHKD")))
+  form <- eval(parse(text=paste("HypoP ~", functional.form, "+ BSKgezien + Sex + surgery_type + CHKD")))
   model <- rms::lrm(form, data=single.imputation, # SINGLE IMPUTATION
                     maxit=1000, x=TRUE, y=TRUE)
   model.AICs <- c(model.AICs, stats::AIC(model))
@@ -190,8 +189,8 @@ cat("Minimum AIC:", which(model.AICs==min(model.AICs)))
 ```{r, eval=TRUE, warning=FALSE}
 # linear
 form.full.model <- HypoP ~ dPTH + 
-  BSKgezien + 
   CorrCa24u + 
+  BSKgezien + 
   Age_Years + 
   Sex +
   surgery_type +
@@ -209,7 +208,7 @@ full.model <- Hmisc::fit.mult.impute(form.full.model, lrm,
 ```{r, eval=TRUE}
 full.model.single <- rms::lrm(form.full.model, data=single.imputation, # SINGLE IMPUTATION
                               x=TRUE, y=TRUE)
-best.flexible.model <- rms::lrm(HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + Age_Years + Sex + surgery_type + BSKgezien + CHKD,
+best.flexible.model <- rms::lrm(HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + BSKgezien + Age_Years + Sex + surgery_type + CHKD,
                                 data=single.imputation, # SINGLE IMPUTATION
                                 maxit=1000, x=TRUE, y=TRUE)
 lrtest(best.flexible.model, full.model.single)
@@ -224,7 +223,8 @@ v <- rms::validate(full.model, method="boot", bw=TRUE, rule="p", sls=0.05, B=100
 # Show shrinkage factor
 shrinkage.factor <- v["Slope","test"]
 cat("Shrinkage factor     :", shrinkage.factor, "\n")
-save(shrinkage.factor, work.data, imputed.data, single.imputation, file=paste0(file.path, "/Data/test.Rdata"))
+save(shrinkage.factor, work.data, imputed.data, single.imputation, 
+     file=paste0(file.path, "/Data/test.Rdata"))
 
 # Optimism corrected C-index
 cindex.orig<-(v["Dxy","index.orig"]+1)/2   # original C-index
@@ -239,12 +239,8 @@ cat(" Original C          :", cindex.orig, "\n",
 # Backward selection
 ```{r, eval=TRUE, warning=FALSE}
 form.final.model <- HypoP ~ dPTH + 
-  BSKgezien +
-  CorrCa24u 
-  # Age_Years +
-  # Sex +
-  # surgery_type +
-  # CHKD
+  CorrCa24u +
+  BSKgezien 
 
 # multiple imputation model
 final.model <- Hmisc::fit.mult.impute(form.final.model, lrm, 
@@ -289,8 +285,8 @@ for (model.type in model.types){
   } else{
     summary.model <- summary(fitted.model, 
                            dPTH=c(0, 1),
-                           CorrCa24u=c(0, 0.1),
-                           BSKgezien="No")[which(summary(fitted.model)[, "Type"]==1), 
+                           CorrCa24u=c(0.2, 0.1),
+                           BSKgezien="Yes")[which(summary(fitted.model)[, "Type"]==1), 
                                            c("Effect")]
   }
   
@@ -309,11 +305,12 @@ for (model.type in model.types){
   Int.CI.upper <- fitted.model$coefficients["Intercept"]+qnorm(0.975)*sqrt(diag(fitted.model$var)[1])
   assign(paste0("Int.", model.type, ".CI.upper"), Int.CI.upper)
   
-  assign(paste0("CI.", model.type, ".model"), 
-                exp(rbind(c(shrinkage.factor*Int.CI.lower+intercept.extra,
+  CI.df <- exp(rbind(c(shrinkage.factor*Int.CI.lower+intercept.extra,
                             shrinkage.factor*Int.CI.upper+intercept.extra),
                           shrinkage.factor*cbind(coef.model+qnorm(0.025)*sqrt(diag(fitted.model$var)[-1]),
-                                                 coef.model+qnorm(0.975)*sqrt(diag(fitted.model$var)[-1])))))
+                                                 coef.model+qnorm(0.975)*sqrt(diag(fitted.model$var)[-1]))))
+  row.names(CI.df)[1] <- c("Intercept") # give intercept a name
+  assign(paste0("CI.", model.type, ".model"), CI.df)
   
   assign(paste0("OR.", model.type, ".model"), 
          exp(c(intercept.shrunk, coef.model)))
@@ -324,9 +321,7 @@ coef.final.model.webapp <- shrinkage.factor*summary(final.model,
                                    CorrCa24u=c(1, 2), 
                                    BSKgezien="No")[which(summary(final.model)[, "Type"]==1), 
                                                    c("Effect")]
-save(shrinkage.factor,
-     final.intercept.shrunk,  
-     coef.final.model.webapp, 
+save(shrinkage.factor, final.intercept.shrunk, coef.final.model.webapp, 
      file=paste0(file.path, "/Results/final.model.Rdata"))
 ```
 
@@ -364,10 +359,13 @@ grDevices::dev.off()
 ```
 # Save table
 ```{r, eval=TRUE, warning=FALSE}
-OR.table <- data.frame(names=names(full.model$coefficients),
-                                coef.full=sprintf("%.3f", OR.full.model),
-                                CI.full=c(paste0("[", sprintf("%.3f", CI.full.model[, 1]), "; ", 
-                                               sprintf("%.3f", CI.full.model[, 2]), "]")),
+names.coef <- c("Intercept", "dPTH", "CorrCa24u", "BSKgezien - No:Yes", 
+                               "Age_Years", "Sex - Male:Female", 
+                               "surgery_type - completion:total", "CHKD - Yes:No")
+OR.table <- data.frame(names=names.coef,
+                                coef.full=sprintf("%.3f", OR.full.model[names.coef]),
+                                CI.full=c(paste0("[", sprintf("%.3f", CI.full.model[names.coef, 1]), "; ", 
+                                               sprintf("%.3f", CI.full.model[names.coef, 2]), "]")),
                                 Chi.full=c("", sprintf("%.1f", an.full[-nrow(an.full), "Chi-Square"])),
                                 coef.final=c(sprintf("%.3f", OR.final.model), rep("", 4)),
                                 CI.final=c(paste0("[", sprintf("%.3f", CI.final.model[, 1]), "; ", 
@@ -451,18 +449,30 @@ for (type in c("full", "final")){
 ```
 # dPTH and readmission
 ```{r, eval=TRUE}
-high.dPTH <- ifelse(single.imputation$dPTH>70, 1, 0)
-table(single.imputation$Readmission, high.dPTH)
+high.dPTH <- c()
+lp <- c()
+for (i in 1:m){
+  selected.imputation <- mice::complete(imputed.data, i)
+  
+  high.dPTH <- cbind(high.dPTH, ifelse(selected.imputation$dPTH>70, 1, 0))
+  
+  lp <- cbind(lp,
+              final.intercept.shrunk+
+                  coef.final.model.webapp["dPTH"]*selected.imputation$dPTH+
+                  coef.final.model.webapp["CorrCa24u"]*selected.imputation$CorrCa24u+
+                  coef.final.model.webapp["BSKgezien - Yes:No"]*ifelse(selected.imputation$BSKgezien == "Yes", 1, 0))
+}
+# if the majority of imputations gave high dPTH, consider this patient high dPTH
+table(single.imputation$Readmission, rowMeans(high.dPTH)>0.5)
 
-pred <- predict(final.model, newdata=single.imputation, type="fitted") # TOOD; change to shrunk model
+# average predicted probability of all imputations
+pred <- rowMeans(exp(lp)/(1+exp(lp)))
 
-lp <- final.intercept.shrunk+
-        coef.final.model.webapp["dPTH"]*single.imputation$dPTH+
-        coef.final.model.webapp["CorrCa24u"]*single.imputation$CorrCa24u+
-        coef.final.model.webapp["BSKgezien - Yes:No"]*ifelse(single.imputation$BSKgezien == "Yes", 1, 0)
-pred <- exp(lp)/(1+exp(lp))
-      
-tri.pred <- ifelse(pred<0.1, 1, ifelse(pred>0.3, 3, 2))
-table(single.imputation$Readmission, tri.pred)
-table(single.imputation$HypoP, tri.pred)
+# predictions stratified
+str.pred <- ifelse(pred<0.1, 1, ifelse(pred>0.3, 3, 2))
+table(str.pred)
+# absolute numbers
+table(single.imputation$Readmission, str.pred)
+# percentages
+round(table(single.imputation$Readmission, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)
 ```
