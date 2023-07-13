@@ -19,8 +19,6 @@ seed <- 1
 set.seed(seed)
 
 # load libraries
-library(haven)
-library(dplyr)
 library(mice)
 library(rms)
 ```
@@ -28,7 +26,7 @@ library(rms)
 # Load data
 ```{r, eval=TRUE, echo=TRUE, message=FALSE, warning=FALSE}
 file.path <- "Z:/Project Predict Hypoparathyroidism/Development/"
-original.data <- read.csv(paste0(file.path, "Data/Data.csv"), 
+original.data <- utils::read.csv(paste0(file.path, "Data/Data.csv"), 
                  stringsAsFactors=TRUE,
                  header = T, sep = ";", dec = ".", 
                  na.strings = c("", " ", "NA", "999", 999, "999.00", 999.00, 
@@ -217,7 +215,7 @@ lrtest(best.flexible.model, full.model.single)
 # Calculate optimism using bootstrap using full model and doing backward selection for each bootstrap
 ```{r, eval=TRUE, warning=FALSE}
 # for single imputation
-v <- rms::validate(full.model, method="boot", bw=TRUE, rule="p", sls=0.05, B=100,
+v <- rms::validate(full.model, method="boot", bw=TRUE, rule="p", sls=0.05, B=1000,
                    pr=FALSE, type="individual")
 
 # Show shrinkage factor
@@ -470,6 +468,7 @@ pred <- rowMeans(exp(lp)/(1+exp(lp)))
 # predictions stratified
 str.pred <- ifelse(pred<0.1, 1, ifelse(pred>0.3, 3, 2))
 table(str.pred)
+round(table(str.pred)/nrow(work.data)*100, 1)
 # absolute numbers
 table(single.imputation$Readmission, str.pred)
 # percentages

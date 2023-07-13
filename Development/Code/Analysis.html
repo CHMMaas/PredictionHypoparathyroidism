@@ -374,15 +374,13 @@ seed &lt;- 1
 set.seed(seed)
 
 # load libraries
-library(haven)
-library(dplyr)
 library(mice)
 library(rms)</code></pre>
 </div>
 <div id="load-data" class="section level1">
 <h1>Load data</h1>
 <pre class="r"><code>file.path &lt;- &quot;Z:/Project Predict Hypoparathyroidism/Development/&quot;
-original.data &lt;- read.csv(paste0(file.path, &quot;Data/Data.csv&quot;), 
+original.data &lt;- utils::read.csv(paste0(file.path, &quot;Data/Data.csv&quot;), 
                  stringsAsFactors=TRUE,
                  header = T, sep = &quot;;&quot;, dec = &quot;.&quot;, 
                  na.strings = c(&quot;&quot;, &quot; &quot;, &quot;NA&quot;, &quot;999&quot;, 999, &quot;999.00&quot;, 999.00, 
@@ -470,7 +468,7 @@ miceHypoP</code></pre>
 miceHypoPpred[, &quot;Record_ID&quot;] &lt;- 0
 
 # single imputation
-m &lt;- 5
+m &lt;- 10
 m.choose &lt;- 1
 mi &lt;- mice::mice(work.data, m = m, seed = seed,
            method=miceHypoPmeth,
@@ -495,7 +493,6 @@ imputed.data &lt;- as.mids(mi_long)
 
 # set data distributions
 single.imputation &lt;- mice::complete(imputed.data, m.choose)
-
 dd&lt;-rms::datadist(single.imputation)
 options(datadist=&#39;dd&#39;)
 options(digits=8)</code></pre>
@@ -515,7 +512,7 @@ functional.forms &lt;- list(
   &quot;dPTH + dCorrCa24u&quot;)
 model.AICs &lt;- c()
 for (functional.form in functional.forms){
-  form &lt;- eval(parse(text=paste(&quot;HypoP ~&quot;, functional.form, &quot;+ Age_Years + Sex + surgery_type + BSKgezien + CHKD&quot;)))
+  form &lt;- eval(parse(text=paste(&quot;HypoP ~&quot;, functional.form, &quot;+ BSKgezien + Age_Years + Sex + surgery_type + CHKD&quot;)))
   model &lt;- rms::lrm(form, data=single.imputation) # SINGLE IMPUTATION
   model.AICs &lt;- c(model.AICs, stats::AIC(model))
 }
@@ -525,14 +522,14 @@ openxlsx::write.xlsx(possible.predictors.df,
             file=paste0(file.path, &quot;/Results/functional.form.xlsx&quot;))
 print(cbind(functional.forms, model.AICs))</code></pre>
 <pre><code>##      functional.forms      model.AICs
-## [1,] &quot;PTH24u + Ca24u&quot;      217.46346 
-## [2,] &quot;PTH24u + CorrCa24u&quot;  212.61244 
-## [3,] &quot;PTH24u + dCa24u&quot;     223.92924 
-## [4,] &quot;PTH24u + dCorrCa24u&quot; 220.7569  
-## [5,] &quot;dPTH + Ca24u&quot;        193.62584 
-## [6,] &quot;dPTH + CorrCa24u&quot;    190.47372 
-## [7,] &quot;dPTH + dCa24u&quot;       197.48065 
-## [8,] &quot;dPTH + dCorrCa24u&quot;   195.82417</code></pre>
+## [1,] &quot;PTH24u + Ca24u&quot;      205.88306 
+## [2,] &quot;PTH24u + CorrCa24u&quot;  200.70261 
+## [3,] &quot;PTH24u + dCa24u&quot;     211.11102 
+## [4,] &quot;PTH24u + dCorrCa24u&quot; 207.9445  
+## [5,] &quot;dPTH + Ca24u&quot;        186.73791 
+## [6,] &quot;dPTH + CorrCa24u&quot;    182.68987 
+## [7,] &quot;dPTH + dCa24u&quot;       190.35074 
+## [8,] &quot;dPTH + dCorrCa24u&quot;   188.27887</code></pre>
 <pre class="r"><code>cat(&quot;Minimum AIC:&quot;, which(model.AICs==min(model.AICs)))</code></pre>
 <pre><code>## Minimum AIC: 6</code></pre>
 <pre class="r"><code># Warning message means that we predict exact 0 and 1 due to smalls ample size (see https://www.statology.org/glm-fit-fitted-probabilities-numerically-0-or-1-occurred/)</code></pre>
@@ -542,10 +539,10 @@ print(cbind(functional.forms, model.AICs))</code></pre>
 <pre class="r"><code># plot most flexible model
 form.flexible.model &lt;- HypoP ~ rms::rcs(dPTH, 4) + 
   rms::rcs(CorrCa24u, 4) + 
+  BSKgezien + 
   rms::rcs(Age_Years, 4) + 
   Sex + 
   surgery_type + 
-  BSKgezien + 
   CHKD
 flexible.model &lt;- rms::lrm(form.flexible.model, data=single.imputation, 
                            maxit=1000, x=TRUE, y=TRUE)
@@ -572,7 +569,7 @@ functional.forms &lt;- list(
   &quot;rms::rcs(dPTH, 4) + rms::rcs(CorrCa24u, 3) + rms::rcs(Age_Years, 3)&quot;) 
 model.AICs &lt;- c()
 for (functional.form in functional.forms){
-  form &lt;- eval(parse(text=paste(&quot;HypoP ~&quot;, functional.form, &quot;+ Sex + surgery_type + BSKgezien + CHKD&quot;)))
+  form &lt;- eval(parse(text=paste(&quot;HypoP ~&quot;, functional.form, &quot;+ BSKgezien + Sex + surgery_type + CHKD&quot;)))
   model &lt;- rms::lrm(form, data=single.imputation, # SINGLE IMPUTATION
                     maxit=1000, x=TRUE, y=TRUE)
   model.AICs &lt;- c(model.AICs, stats::AIC(model))
@@ -598,20 +595,20 @@ print(cbind(functional.forms, model.AICs))</code></pre>
 ## [13,] &quot;dPTH + rms::rcs(CorrCa24u, 3) + rms::rcs(Age_Years, 3)&quot;             
 ## [14,] &quot;rms::rcs(dPTH, 4) + rms::rcs(CorrCa24u, 3) + rms::rcs(Age_Years, 3)&quot;
 ##       model.AICs
-##  [1,] 190.47372 
-##  [2,] 191.61474 
-##  [3,] 190.30413 
-##  [4,] 191.77362 
-##  [5,] 191.9538  
-##  [6,] 193.87146 
-##  [7,] 195.78262 
-##  [8,] 191.29013 
-##  [9,] 193.2286  
-## [10,] 192.06207 
-## [11,] 191.95554 
-## [12,] 191.21536 
-## [13,] 192.63606 
-## [14,] 192.75722</code></pre>
+##  [1,] 182.68987 
+##  [2,] 183.89695 
+##  [3,] 182.36799 
+##  [4,] 184.93544 
+##  [5,] 184.06026 
+##  [6,] 185.86134 
+##  [7,] 187.62675 
+##  [8,] 183.83408 
+##  [9,] 185.81507 
+## [10,] 185.00349 
+## [11,] 184.05471 
+## [12,] 183.73578 
+## [13,] 185.06759 
+## [14,] 185.32849</code></pre>
 <pre class="r"><code>cat(&quot;Minimum AIC:&quot;, which(model.AICs==min(model.AICs)))</code></pre>
 <pre><code>## Minimum AIC: 3</code></pre>
 </div>
@@ -619,8 +616,8 @@ print(cbind(functional.forms, model.AICs))</code></pre>
 <h1>Full model</h1>
 <pre class="r"><code># linear
 form.full.model &lt;- HypoP ~ dPTH + 
-  BSKgezien + 
   CorrCa24u + 
+  BSKgezien + 
   Age_Years + 
   Sex +
   surgery_type +
@@ -638,50 +635,51 @@ full.model &lt;- Hmisc::fit.mult.impute(form.full.model, lrm,
 imputation</h1>
 <pre class="r"><code>full.model.single &lt;- rms::lrm(form.full.model, data=single.imputation, # SINGLE IMPUTATION
                               x=TRUE, y=TRUE)
-best.flexible.model &lt;- rms::lrm(HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + Age_Years + Sex + surgery_type + BSKgezien + CHKD,
+best.flexible.model &lt;- rms::lrm(HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + BSKgezien + Age_Years + Sex + surgery_type + CHKD,
                                 data=single.imputation, # SINGLE IMPUTATION
                                 maxit=1000, x=TRUE, y=TRUE)
 lrtest(best.flexible.model, full.model.single)</code></pre>
 <pre><code>## 
-## Model 1: HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + Age_Years + Sex + surgery_type + 
-##     BSKgezien + CHKD
-## Model 2: HypoP ~ dPTH + BSKgezien + CorrCa24u + Age_Years + Sex + surgery_type + 
+## Model 1: HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + BSKgezien + Age_Years + 
+##     Sex + surgery_type + CHKD
+## Model 2: HypoP ~ dPTH + CorrCa24u + BSKgezien + Age_Years + Sex + surgery_type + 
 ##     CHKD
 ## 
 ## L.R. Chisq       d.f.          P 
-## 4.16958768 2.00000000 0.12433275</code></pre>
+## 4.32187833 2.00000000 0.11521686</code></pre>
 </div>
 <div id="calculate-optimism-using-bootstrap-using-full-model-and-doing-backward-selection-for-each-bootstrap" class="section level1">
 <h1>Calculate optimism using bootstrap using full model and doing
 backward selection for each bootstrap</h1>
 <pre class="r"><code># for single imputation
-v &lt;- rms::validate(full.model, method=&quot;boot&quot;, bw=TRUE, rule=&quot;p&quot;, sls=0.05, B=100,
+v &lt;- rms::validate(full.model, method=&quot;boot&quot;, bw=TRUE, rule=&quot;p&quot;, sls=0.05, B=1000,
                    pr=FALSE, type=&quot;individual&quot;)</code></pre>
 <pre><code>## 
 ##      Backwards Step-down - Original Model
 ## 
 ##  Deleted      Chi-Sq d.f. P      Residual d.f. P      AIC  
-##  Sex          0.00   1    0.9987 0.00     1    0.9987 -2.00
-##  Age_Years    0.22   1    0.6410 0.22     2    0.8970 -3.78
-##  surgery_type 0.48   1    0.4896 0.69     3    0.8744 -5.31
-##  CHKD         0.49   1    0.4837 1.19     4    0.8805 -6.81
+##  Sex          0.02   1    0.8984 0.02     1    0.8984 -1.98
+##  Age_Years    0.16   1    0.6860 0.18     2    0.9141 -3.82
+##  surgery_type 0.41   1    0.5239 0.59     3    0.8996 -5.41
+##  CHKD         0.31   1    0.5770 0.90     4    0.9250 -7.10
 ## 
 ## Approximate Estimates after Deleting Factors
 ## 
-##                   Coef    S.E.   Wald Z         P
-## Intercept      0.12572 3.54292  0.03549 9.717e-01
-## dPTH           0.09281 0.02121  4.37531 1.213e-05
-## BSKgezien=Yes -1.52661 0.51238 -2.97945 2.888e-03
-## CorrCa24u     -4.02580 1.43819 -2.79921 5.123e-03
+##                   Coef    S.E.  Wald Z         P
+## Intercept      0.79676 3.57037  0.2232 8.234e-01
+## dPTH           0.09005 0.01899  4.7418 2.118e-06
+## CorrCa24u     -4.21298 1.53704 -2.7410 6.126e-03
+## BSKgezien=Yes -1.58983 0.52524 -3.0268 2.471e-03
 ## 
 ## Factors in Final Model
 ## 
-## [1] dPTH      BSKgezien CorrCa24u</code></pre>
+## [1] dPTH      CorrCa24u BSKgezien</code></pre>
 <pre class="r"><code># Show shrinkage factor
 shrinkage.factor &lt;- v[&quot;Slope&quot;,&quot;test&quot;]
 cat(&quot;Shrinkage factor     :&quot;, shrinkage.factor, &quot;\n&quot;)</code></pre>
-<pre><code>## Shrinkage factor     : 0.87402286</code></pre>
-<pre class="r"><code>save(shrinkage.factor, work.data, imputed.data, single.imputation, file=paste0(file.path, &quot;/Data/test.Rdata&quot;))
+<pre><code>## Shrinkage factor     : 0.86825232</code></pre>
+<pre class="r"><code>save(shrinkage.factor, work.data, imputed.data, single.imputation, 
+     file=paste0(file.path, &quot;/Data/test.Rdata&quot;))
 
 # Optimism corrected C-index
 cindex.orig&lt;-(v[&quot;Dxy&quot;,&quot;index.orig&quot;]+1)/2   # original C-index
@@ -691,20 +689,16 @@ cat(&quot; Original C          :&quot;, cindex.orig, &quot;\n&quot;,
     &quot;Optimism            :&quot;, optimism.C, &quot;\n&quot;,
     &quot;Mean bootstrapped C :&quot;, cindex.B, &quot;\n&quot;,
     &quot;Optimism corrected C:&quot;, cindex.orig-optimism.C, &quot;\n&quot;)</code></pre>
-<pre><code>##  Original C          : 0.90704404 
-##  Optimism            : 0.012429725 
-##  Mean bootstrapped C : 0.89461432 
-##  Optimism corrected C: 0.89461432</code></pre>
+<pre><code>##  Original C          : 0.89673913 
+##  Optimism            : 0.014645301 
+##  Mean bootstrapped C : 0.88209383 
+##  Optimism corrected C: 0.88209383</code></pre>
 </div>
 <div id="backward-selection" class="section level1">
 <h1>Backward selection</h1>
 <pre class="r"><code>form.final.model &lt;- HypoP ~ dPTH + 
-  BSKgezien +
-  CorrCa24u 
-  # Age_Years +
-  # Sex +
-  # surgery_type +
-  # CHKD
+  CorrCa24u +
+  BSKgezien 
 
 # multiple imputation model
 final.model &lt;- Hmisc::fit.mult.impute(form.final.model, lrm, 
@@ -741,37 +735,37 @@ for (model.type in model.types){
   # save results
   if (model.type==&quot;simple&quot;){
     summary.model &lt;- summary(fitted.model, 
-                           dPTH=c(0, 1))[which(summary(fitted.model)[, &quot;Type&quot;]==1), 
-                                           c(&quot;Effect&quot;)]
-    
+                           dPTH=c(0, 1))[which(summary(fitted.model)[, &quot;Type&quot;]==1),]
+    coef.model &lt;- shrinkage.factor*summary.model[&quot;Effect&quot;]
+    CI.coef &lt;- summary.model[c(&quot;Lower 0.95&quot;, &quot;Upper 0.95&quot;)]
   } else{
     summary.model &lt;- summary(fitted.model, 
                            dPTH=c(0, 1),
-                           CorrCa24u=c(0, 0.1),
-                           BSKgezien=&quot;No&quot;)[which(summary(fitted.model)[, &quot;Type&quot;]==1), 
-                                           c(&quot;Effect&quot;)]
+                           CorrCa24u=c(0.2, 0.1),
+                           BSKgezien=&quot;Yes&quot;)[which(summary(fitted.model)[, &quot;Type&quot;]==1), ]
+    coef.model &lt;- shrinkage.factor*summary.model[,  &quot;Effect&quot;]
+    CI.coef &lt;- summary.model[, c(&quot;Lower 0.95&quot;, &quot;Upper 0.95&quot;)]
   }
   
   # save results
   assign(paste0(model.type, &quot;.intercept.shrunk&quot;), intercept.shrunk)
+  assign(paste0(&quot;coef.&quot;, model.type, &quot;.model&quot;), coef.model)
   
   an &lt;- stats::anova(fitted.model)
   assign(paste0(&quot;an.&quot;, model.type), an)
   
-  coef.model &lt;- shrinkage.factor*summary.model
-  assign(paste0(&quot;coef.&quot;, model.type, &quot;.model&quot;), coef.model)
-  
-  Int.CI.lower &lt;- fitted.model$coefficients[&quot;Intercept&quot;]+qnorm(0.025)*sqrt(diag(fitted.model$var)[1])
-  assign(paste0(&quot;Int.&quot;, model.type, &quot;.CI.lower&quot;), Int.CI.lower)
-  
-  Int.CI.upper &lt;- fitted.model$coefficients[&quot;Intercept&quot;]+qnorm(0.975)*sqrt(diag(fitted.model$var)[1])
-  assign(paste0(&quot;Int.&quot;, model.type, &quot;.CI.upper&quot;), Int.CI.upper)
-  
-  assign(paste0(&quot;CI.&quot;, model.type, &quot;.model&quot;), 
-                exp(rbind(c(shrinkage.factor*Int.CI.lower+intercept.extra,
-                            shrinkage.factor*Int.CI.upper+intercept.extra),
-                          shrinkage.factor*cbind(coef.model+qnorm(0.025)*sqrt(diag(fitted.model$var)[-1]),
-                                                 coef.model+qnorm(0.975)*sqrt(diag(fitted.model$var)[-1])))))
+  Int.CI.lower &lt;- fitted.model$coefficients[&quot;Intercept&quot;]+qnorm(0.025)*sqrt(diag(fitted.model$var)[1]/nrow(work.data))
+  Int.CI.upper &lt;- fitted.model$coefficients[&quot;Intercept&quot;]+qnorm(0.975)*sqrt(diag(fitted.model$var)[1]/nrow(work.data))
+  CI.df &lt;- exp(rbind(c(shrinkage.factor*Int.CI.lower+intercept.extra,
+                       shrinkage.factor*Int.CI.upper+intercept.extra),
+                     shrinkage.factor*CI.coef))
+  if (model.type!=&quot;simple&quot;){
+    row.names(CI.df)[1] &lt;- c(&quot;Intercept&quot;) # give intercept a name
+  } else{
+    CI.df &lt;- as.data.frame(CI.df)
+    row.names(CI.df) &lt;- c(&quot;Intercept&quot;, &quot;dPTH&quot;)
+  }
+  assign(paste0(&quot;CI.&quot;, model.type, &quot;.model&quot;), CI.df)
   
   assign(paste0(&quot;OR.&quot;, model.type, &quot;.model&quot;), 
          exp(c(intercept.shrunk, coef.model)))
@@ -782,9 +776,7 @@ coef.final.model.webapp &lt;- shrinkage.factor*summary(final.model,
                                    CorrCa24u=c(1, 2), 
                                    BSKgezien=&quot;No&quot;)[which(summary(final.model)[, &quot;Type&quot;]==1), 
                                                    c(&quot;Effect&quot;)]
-save(shrinkage.factor,
-     final.intercept.shrunk,  
-     coef.final.model.webapp, 
+save(shrinkage.factor, final.intercept.shrunk, coef.final.model.webapp, 
      file=paste0(file.path, &quot;/Results/final.model.Rdata&quot;))</code></pre>
 </div>
 <div id="assess-performance" class="section level1">
@@ -809,10 +801,10 @@ grDevices::dev.off()</code></pre>
 <pre class="r"><code>lrtest(simple.model, final.model)</code></pre>
 <pre><code>## 
 ## Model 1: HypoP ~ dPTH
-## Model 2: HypoP ~ dPTH + BSKgezien + CorrCa24u
+## Model 2: HypoP ~ dPTH + CorrCa24u + BSKgezien
 ## 
 ##    L.R. Chisq          d.f.             P 
-## 1.8000695e+01 2.0000000e+00 1.2336691e-04</code></pre>
+## 1.8984815e+01 2.0000000e+00 7.5422323e-05</code></pre>
 <pre class="r"><code># final model
 png(file=paste0(file.path, &quot;Results/model.performance.final.model.png&quot;), 
     width=400, height=400, units=&quot;px&quot;)
@@ -822,12 +814,12 @@ grDevices::dev.off()</code></pre>
 ##   2</code></pre>
 <pre class="r"><code>lrtest(final.model, full.model)</code></pre>
 <pre><code>## 
-## Model 1: HypoP ~ dPTH + BSKgezien + CorrCa24u
-## Model 2: HypoP ~ dPTH + BSKgezien + CorrCa24u + Age_Years + Sex + surgery_type + 
+## Model 1: HypoP ~ dPTH + CorrCa24u + BSKgezien
+## Model 2: HypoP ~ dPTH + CorrCa24u + BSKgezien + Age_Years + Sex + surgery_type + 
 ##     CHKD
 ## 
 ## L.R. Chisq       d.f.          P 
-## 1.25705767 4.00000000 0.86861805</code></pre>
+## 1.11691242 4.00000000 0.89157966</code></pre>
 <pre class="r"><code># full model
 png(file=paste0(file.path, &quot;Results/model.performance.full.model.png&quot;), 
     width=400, height=400, units=&quot;px&quot;)
@@ -838,31 +830,34 @@ grDevices::dev.off()</code></pre>
 </div>
 <div id="save-table" class="section level1">
 <h1>Save table</h1>
-<pre class="r"><code>OR.table &lt;- data.frame(names=names(full.model$coefficients),
-                                coef.full=sprintf(&quot;%.3f&quot;, OR.full.model),
-                                CI.full=c(paste0(&quot;[&quot;, sprintf(&quot;%.3f&quot;, CI.full.model[, 1]), &quot;; &quot;, 
-                                               sprintf(&quot;%.3f&quot;, CI.full.model[, 2]), &quot;]&quot;)),
+<pre class="r"><code>names.coef &lt;- c(&quot;Intercept&quot;, &quot;dPTH&quot;, &quot;CorrCa24u&quot;, &quot;BSKgezien - No:Yes&quot;, 
+                               &quot;Age_Years&quot;, &quot;Sex - Male:Female&quot;, 
+                               &quot;surgery_type - completion:total&quot;, &quot;CHKD - Yes:No&quot;)
+OR.table &lt;- data.frame(names=names.coef,
+                                coef.full=sprintf(&quot;%.2f&quot;, OR.full.model[names.coef]),
+                                CI.full=c(paste0(&quot;[&quot;, sprintf(&quot;%.2f&quot;, CI.full.model[names.coef, 1]), &quot;; &quot;, 
+                                               sprintf(&quot;%.2f&quot;, CI.full.model[names.coef, 2]), &quot;]&quot;)),
                                 Chi.full=c(&quot;&quot;, sprintf(&quot;%.1f&quot;, an.full[-nrow(an.full), &quot;Chi-Square&quot;])),
-                                coef.final=c(sprintf(&quot;%.3f&quot;, OR.final.model), rep(&quot;&quot;, 4)),
-                                CI.final=c(paste0(&quot;[&quot;, sprintf(&quot;%.3f&quot;, CI.final.model[, 1]), &quot;; &quot;, 
-                                               sprintf(&quot;%.3f&quot;, CI.final.model[, 2]), &quot;]&quot;), rep(&quot;&quot;, 4)),
+                                coef.final=c(sprintf(&quot;%.2f&quot;, OR.final.model), rep(&quot;&quot;, 4)),
+                                CI.final=c(paste0(&quot;[&quot;, sprintf(&quot;%.2f&quot;, CI.final.model[, 1]), &quot;; &quot;, 
+                                               sprintf(&quot;%.2f&quot;, CI.final.model[, 2]), &quot;]&quot;), rep(&quot;&quot;, 4)),
                                 Chi.final=c(&quot;&quot;, sprintf(&quot;%.1f&quot;, an.final[-nrow(an.final), &quot;Chi-Square&quot;]),
                                             rep(&quot;&quot;, 4)),
-                                coef.simple=c(sprintf(&quot;%.3f&quot;, OR.simple.model), rep(&quot;&quot;, 6)),
-                                CI.simple=c(paste0(&quot;[&quot;, sprintf(&quot;%.3f&quot;, CI.simple.model[, 1]), &quot;; &quot;, 
-                                               sprintf(&quot;%.3f&quot;, CI.simple.model[, 2]), &quot;]&quot;),
+                                coef.simple=c(sprintf(&quot;%.2f&quot;, OR.simple.model), rep(&quot;&quot;, 6)),
+                                CI.simple=c(paste0(&quot;[&quot;, sprintf(&quot;%.2f&quot;, CI.simple.model[, 1]), &quot;; &quot;, 
+                                               sprintf(&quot;%.2f&quot;, CI.simple.model[, 2]), &quot;]&quot;),
                                             rep(&quot;&quot;, 6)),
                                 Chi.simple=c(&quot;&quot;, sprintf(&quot;%.1f&quot;, an.simple[-nrow(an.simple), &quot;Chi-Square&quot;]),
                                              rep(&quot;&quot;, 6)))
 Cindex.table &lt;- c(&quot;C-index&quot;,
-                  sprintf(&quot;%.3f&quot;, out.full$cindex-optimism.C), 
-                  paste0(&quot;[&quot;, sprintf(&quot;%.3f&quot;, out.full$cindex.lower-optimism.C), &quot;; &quot;, sprintf(&quot;%.3f&quot;, out.full$cindex.upper-optimism.C), &quot;]&quot;),
+                  sprintf(&quot;%.2f&quot;, out.full$cindex-optimism.C), 
+                  paste0(&quot;[&quot;, sprintf(&quot;%.2f&quot;, out.full$cindex.lower-optimism.C), &quot;; &quot;, sprintf(&quot;%.2f&quot;, out.full$cindex.upper-optimism.C), &quot;]&quot;),
                   &quot;&quot;,
-                  sprintf(&quot;%.3f&quot;, out.final$cindex-optimism.C), 
-                  paste0(&quot;[&quot;, sprintf(&quot;%.3f&quot;, out.final$cindex.lower-optimism.C), &quot;; &quot;, sprintf(&quot;%.3f&quot;, out.final$cindex.upper-optimism.C), &quot;]&quot;),
+                  sprintf(&quot;%.2f&quot;, out.final$cindex-optimism.C), 
+                  paste0(&quot;[&quot;, sprintf(&quot;%.2f&quot;, out.final$cindex.lower-optimism.C), &quot;; &quot;, sprintf(&quot;%.2f&quot;, out.final$cindex.upper-optimism.C), &quot;]&quot;),
                   &quot;&quot;,
-                  sprintf(&quot;%.3f&quot;, out.simple$cindex-optimism.C), 
-                  paste0(&quot;[&quot;, sprintf(&quot;%.3f&quot;, out.simple$cindex.lower-optimism.C), &quot;; &quot;, sprintf(&quot;%.3f&quot;, out.simple$cindex.upper-optimism.C), &quot;]&quot;),
+                  sprintf(&quot;%.2f&quot;, out.simple$cindex-optimism.C), 
+                  paste0(&quot;[&quot;, sprintf(&quot;%.2f&quot;, out.simple$cindex.lower-optimism.C), &quot;; &quot;, sprintf(&quot;%.2f&quot;, out.simple$cindex.upper-optimism.C), &quot;]&quot;),
                   &quot;&quot;)
 combined.table &lt;- rbind(OR.table, Cindex.table)
 final.table &lt;- cbind(combined.table[, 1:4], rep(&quot;&quot;, nrow(combined.table)),
@@ -927,31 +922,50 @@ for (type in c(&quot;full&quot;, &quot;final&quot;)){
 </div>
 <div id="dpth-and-readmission" class="section level1">
 <h1>dPTH and readmission</h1>
-<pre class="r"><code>high.dPTH &lt;- ifelse(single.imputation$dPTH&gt;70, 1, 0)
-table(single.imputation$Readmission, high.dPTH)</code></pre>
-<pre><code>##      high.dPTH
-##         0   1
-##   No  213 126
-##   Yes   0  27</code></pre>
-<pre class="r"><code>pred &lt;- predict(final.model, newdata=single.imputation, type=&quot;fitted&quot;) # TOOD; change to shrunk model
+<pre class="r"><code>dPTH &lt;- c()
+lp &lt;- c()
+for (i in 1:m){
+  selected.imputation &lt;- mice::complete(imputed.data, i)
+  
+  dPTH &lt;- cbind(dPTH, selected.imputation$dPTH)
+  
+  lp &lt;- cbind(lp,
+              final.intercept.shrunk+
+                  coef.final.model.webapp[&quot;dPTH&quot;]*selected.imputation$dPTH+
+                  coef.final.model.webapp[&quot;CorrCa24u&quot;]*selected.imputation$CorrCa24u+
+                  coef.final.model.webapp[&quot;BSKgezien - Yes:No&quot;]*ifelse(selected.imputation$BSKgezien == &quot;Yes&quot;, 1, 0))
+}
+# if the majority of imputations gave high dPTH, consider this patient high dPTH
+table(single.imputation$Readmission, rowMeans(dPTH)&gt;0.7)</code></pre>
+<pre><code>##      
+##       FALSE TRUE
+##   No     23  316
+##   Yes     0   27</code></pre>
+<pre class="r"><code># average predicted probability of all imputations
+pred &lt;- rowMeans(exp(lp)/(1+exp(lp)))
 
-lp &lt;- final.intercept.shrunk+
-        coef.final.model.webapp[&quot;dPTH&quot;]*single.imputation$dPTH+
-        coef.final.model.webapp[&quot;CorrCa24u&quot;]*single.imputation$CorrCa24u+
-        coef.final.model.webapp[&quot;BSKgezien - Yes:No&quot;]*ifelse(single.imputation$BSKgezien == &quot;Yes&quot;, 1, 0)
-pred &lt;- exp(lp)/(1+exp(lp))
-      
-tri.pred &lt;- ifelse(pred&lt;0.1, 1, ifelse(pred&gt;0.3, 3, 2))
-table(single.imputation$Readmission, tri.pred)</code></pre>
-<pre><code>##      tri.pred
+# predictions stratified
+str.pred &lt;- ifelse(pred&lt;0.1, 1, ifelse(pred&gt;0.3, 3, 2))
+table(str.pred)</code></pre>
+<pre><code>## str.pred
+##   1   2   3 
+## 229  74  63</code></pre>
+<pre class="r"><code>round(table(str.pred)/nrow(work.data)*100, 1)</code></pre>
+<pre><code>## str.pred
+##    1    2    3 
+## 62.6 20.2 17.2</code></pre>
+<pre class="r"><code># absolute numbers
+table(single.imputation$Readmission, str.pred)</code></pre>
+<pre><code>##      str.pred
 ##         1   2   3
-##   No  232  62  45
-##   Yes   3   6  18</code></pre>
-<pre class="r"><code>table(single.imputation$HypoP, tri.pred)</code></pre>
-<pre><code>##      tri.pred
-##         1   2   3
-##   No  229  56  37
-##   Yes   6  12  26</code></pre>
+##   No  227  67  45
+##   Yes   2   7  18</code></pre>
+<pre class="r"><code># percentages
+round(table(single.imputation$Readmission, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)</code></pre>
+<pre><code>##      str.pred
+##          1    2    3
+##   No  99.1 90.5 71.4
+##   Yes  0.9  9.5 28.6</code></pre>
 </div>
 
 
