@@ -263,6 +263,7 @@ simple.model <- Hmisc::fit.mult.impute(HypoP ~ dPTH, lrm,
 ```{r, eval=TRUE}
 model.types <- c("full", "final", "simple")
 for (model.type in model.types){
+  print(model.type)
   # new intercept after shrinkage
   fitted.model <- eval(parse(text=paste0(model.type, ".model")))
   lp <- predict(fitted.model)
@@ -279,37 +280,42 @@ for (model.type in model.types){
   # save results
   if (model.type=="simple"){
     summary.model <- summary(fitted.model, 
-                           dPTH=c(0, 1))[which(summary(fitted.model)[, "Type"]==1), 
-                                           c("Effect")]
-    
+                           dPTH=c(0, 1))[which(summary(fitted.model)[, "Type"]==1),]
+    coef.model <- shrinkage.factor*summary.model["Effect"]
+    CI.coef <- summary.model[c("Lower 0.95", "Upper 0.95")]
   } else{
     summary.model <- summary(fitted.model, 
                            dPTH=c(0, 1),
                            CorrCa24u=c(0.2, 0.1),
-                           BSKgezien="Yes")[which(summary(fitted.model)[, "Type"]==1), 
-                                           c("Effect")]
+                           BSKgezien="Yes")[which(summary(fitted.model)[, "Type"]==1), ]
+    coef.model <- shrinkage.factor*summary.model[,  "Effect"]
+    CI.coef <- summary.model[, c("Lower 0.95", "Upper 0.95")]
   }
   
   # save results
   assign(paste0(model.type, ".intercept.shrunk"), intercept.shrunk)
+  assign(paste0("coef.", model.type, ".model"), coef.model)
   
   an <- stats::anova(fitted.model)
   assign(paste0("an.", model.type), an)
   
-  coef.model <- shrinkage.factor*summary.model
-  assign(paste0("coef.", model.type, ".model"), coef.model)
-  
-  Int.CI.lower <- fitted.model$coefficients["Intercept"]+qnorm(0.025)*sqrt(diag(fitted.model$var)[1])
+  Int.CI.lower <- fitted.model$coefficients["Intercept"]+qnorm(0.025)*sqrt(diag(fitted.model$var)[1]/nrow(work.data))
   assign(paste0("Int.", model.type, ".CI.lower"), Int.CI.lower)
   
-  Int.CI.upper <- fitted.model$coefficients["Intercept"]+qnorm(0.975)*sqrt(diag(fitted.model$var)[1])
+  Int.CI.upper <- fitted.model$coefficients["Intercept"]+qnorm(0.975)*sqrt(diag(fitted.model$var)[1]/nrow(work.data))
   assign(paste0("Int.", model.type, ".CI.upper"), Int.CI.upper)
   
   CI.df <- exp(rbind(c(shrinkage.factor*Int.CI.lower+intercept.extra,
-                            shrinkage.factor*Int.CI.upper+intercept.extra),
-                          shrinkage.factor*cbind(coef.model+qnorm(0.025)*sqrt(diag(fitted.model$var)[-1]),
-                                                 coef.model+qnorm(0.975)*sqrt(diag(fitted.model$var)[-1]))))
-  row.names(CI.df)[1] <- c("Intercept") # give intercept a name
+                       shrinkage.factor*Int.CI.upper+intercept.extra),
+                     shrinkage.factor*CI.coef))
+                          # shrinkage.factor*cbind(coef.model+qnorm(0.025)*sqrt(diag(fitted.model$var)[-1]),
+                          #                        coef.model+qnorm(0.975)*sqrt(diag(fitted.model$var)[-1]))))
+  if (model.type!="simple"){
+    row.names(CI.df)[1] <- c("Intercept") # give intercept a name
+  } else{
+    CI.df <- as.data.frame(CI.df)
+    row.names(CI.df) <- c("Intercept", "dPTH")
+  }
   assign(paste0("CI.", model.type, ".model"), CI.df)
   
   assign(paste0("OR.", model.type, ".model"), 
