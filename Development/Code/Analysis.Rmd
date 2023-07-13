@@ -300,16 +300,10 @@ for (model.type in model.types){
   assign(paste0("an.", model.type), an)
   
   Int.CI.lower <- fitted.model$coefficients["Intercept"]+qnorm(0.025)*sqrt(diag(fitted.model$var)[1]/nrow(work.data))
-  assign(paste0("Int.", model.type, ".CI.lower"), Int.CI.lower)
-  
   Int.CI.upper <- fitted.model$coefficients["Intercept"]+qnorm(0.975)*sqrt(diag(fitted.model$var)[1]/nrow(work.data))
-  assign(paste0("Int.", model.type, ".CI.upper"), Int.CI.upper)
-  
   CI.df <- exp(rbind(c(shrinkage.factor*Int.CI.lower+intercept.extra,
                        shrinkage.factor*Int.CI.upper+intercept.extra),
                      shrinkage.factor*CI.coef))
-                          # shrinkage.factor*cbind(coef.model+qnorm(0.025)*sqrt(diag(fitted.model$var)[-1]),
-                          #                        coef.model+qnorm(0.975)*sqrt(diag(fitted.model$var)[-1]))))
   if (model.type!="simple"){
     row.names(CI.df)[1] <- c("Intercept") # give intercept a name
   } else{
