@@ -82,7 +82,7 @@ miceHypoP
 miceHypoPpred[, "Record_ID"] <- 0
 
 # single imputation
-m <- 5
+m <- 10
 m.choose <- 1
 mi <- mice::mice(work.data, m = m, seed = seed,
            method=miceHypoPmeth,
@@ -263,7 +263,6 @@ simple.model <- Hmisc::fit.mult.impute(HypoP ~ dPTH, lrm,
 ```{r, eval=TRUE}
 model.types <- c("full", "final", "simple")
 for (model.type in model.types){
-  print(model.type)
   # new intercept after shrinkage
   fitted.model <- eval(parse(text=paste0(model.type, ".model")))
   lp <- predict(fitted.model)
@@ -363,30 +362,30 @@ names.coef <- c("Intercept", "dPTH", "CorrCa24u", "BSKgezien - No:Yes",
                                "Age_Years", "Sex - Male:Female", 
                                "surgery_type - completion:total", "CHKD - Yes:No")
 OR.table <- data.frame(names=names.coef,
-                                coef.full=sprintf("%.3f", OR.full.model[names.coef]),
-                                CI.full=c(paste0("[", sprintf("%.3f", CI.full.model[names.coef, 1]), "; ", 
-                                               sprintf("%.3f", CI.full.model[names.coef, 2]), "]")),
+                                coef.full=sprintf("%.2f", OR.full.model[names.coef]),
+                                CI.full=c(paste0("[", sprintf("%.2f", CI.full.model[names.coef, 1]), "; ", 
+                                               sprintf("%.2f", CI.full.model[names.coef, 2]), "]")),
                                 Chi.full=c("", sprintf("%.1f", an.full[-nrow(an.full), "Chi-Square"])),
-                                coef.final=c(sprintf("%.3f", OR.final.model), rep("", 4)),
-                                CI.final=c(paste0("[", sprintf("%.3f", CI.final.model[, 1]), "; ", 
-                                               sprintf("%.3f", CI.final.model[, 2]), "]"), rep("", 4)),
+                                coef.final=c(sprintf("%.2f", OR.final.model), rep("", 4)),
+                                CI.final=c(paste0("[", sprintf("%.2f", CI.final.model[, 1]), "; ", 
+                                               sprintf("%.2f", CI.final.model[, 2]), "]"), rep("", 4)),
                                 Chi.final=c("", sprintf("%.1f", an.final[-nrow(an.final), "Chi-Square"]),
                                             rep("", 4)),
-                                coef.simple=c(sprintf("%.3f", OR.simple.model), rep("", 6)),
-                                CI.simple=c(paste0("[", sprintf("%.3f", CI.simple.model[, 1]), "; ", 
-                                               sprintf("%.3f", CI.simple.model[, 2]), "]"),
+                                coef.simple=c(sprintf("%.2f", OR.simple.model), rep("", 6)),
+                                CI.simple=c(paste0("[", sprintf("%.2f", CI.simple.model[, 1]), "; ", 
+                                               sprintf("%.2f", CI.simple.model[, 2]), "]"),
                                             rep("", 6)),
                                 Chi.simple=c("", sprintf("%.1f", an.simple[-nrow(an.simple), "Chi-Square"]),
                                              rep("", 6)))
 Cindex.table <- c("C-index",
-                  sprintf("%.3f", out.full$cindex-optimism.C), 
-                  paste0("[", sprintf("%.3f", out.full$cindex.lower-optimism.C), "; ", sprintf("%.3f", out.full$cindex.upper-optimism.C), "]"),
+                  sprintf("%.2f", out.full$cindex-optimism.C), 
+                  paste0("[", sprintf("%.2f", out.full$cindex.lower-optimism.C), "; ", sprintf("%.2f", out.full$cindex.upper-optimism.C), "]"),
                   "",
-                  sprintf("%.3f", out.final$cindex-optimism.C), 
-                  paste0("[", sprintf("%.3f", out.final$cindex.lower-optimism.C), "; ", sprintf("%.3f", out.final$cindex.upper-optimism.C), "]"),
+                  sprintf("%.2f", out.final$cindex-optimism.C), 
+                  paste0("[", sprintf("%.2f", out.final$cindex.lower-optimism.C), "; ", sprintf("%.2f", out.final$cindex.upper-optimism.C), "]"),
                   "",
-                  sprintf("%.3f", out.simple$cindex-optimism.C), 
-                  paste0("[", sprintf("%.3f", out.simple$cindex.lower-optimism.C), "; ", sprintf("%.3f", out.simple$cindex.upper-optimism.C), "]"),
+                  sprintf("%.2f", out.simple$cindex-optimism.C), 
+                  paste0("[", sprintf("%.2f", out.simple$cindex.lower-optimism.C), "; ", sprintf("%.2f", out.simple$cindex.upper-optimism.C), "]"),
                   "")
 combined.table <- rbind(OR.table, Cindex.table)
 final.table <- cbind(combined.table[, 1:4], rep("", nrow(combined.table)),
@@ -449,12 +448,12 @@ for (type in c("full", "final")){
 ```
 # dPTH and readmission
 ```{r, eval=TRUE}
-high.dPTH <- c()
+dPTH <- c()
 lp <- c()
 for (i in 1:m){
   selected.imputation <- mice::complete(imputed.data, i)
   
-  high.dPTH <- cbind(high.dPTH, ifelse(selected.imputation$dPTH>70, 1, 0))
+  dPTH <- cbind(dPTH, selected.imputation$dPTH)
   
   lp <- cbind(lp,
               final.intercept.shrunk+
@@ -463,7 +462,7 @@ for (i in 1:m){
                   coef.final.model.webapp["BSKgezien - Yes:No"]*ifelse(selected.imputation$BSKgezien == "Yes", 1, 0))
 }
 # if the majority of imputations gave high dPTH, consider this patient high dPTH
-table(single.imputation$Readmission, rowMeans(high.dPTH)>0.5)
+table(single.imputation$Readmission, rowMeans(dPTH)>0.7)
 
 # average predicted probability of all imputations
 pred <- rowMeans(exp(lp)/(1+exp(lp)))
