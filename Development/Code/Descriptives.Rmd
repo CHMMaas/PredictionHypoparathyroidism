@@ -22,6 +22,7 @@ work.data$dCorrCa <- ((work.data$CorrCaBaseline - work.data$CorrCa24u)/work.data
 work.data$dCa <- ((work.data$BaseCa - work.data$Ca24u)/work.data$BaseCa*100)
 
 descr.table <- arsenal::tableby(Validatie1 ~ HypoP +
+                                  Readmission + 
                                   BaselinePTH + 
                                   PTH24u +
                                   dPTH + 
