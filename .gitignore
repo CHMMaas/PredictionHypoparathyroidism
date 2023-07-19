@@ -2,6 +2,6 @@
 .Rhistory
 .RData
 .Ruserdata
-./Development/Data/Data.csv
-./Development/Old
-./Webapp Predict Hypoparathyroidism
+Development/Data/Data.csv
+Development/Old
+Webapp Predict Hypoparathyroidism
