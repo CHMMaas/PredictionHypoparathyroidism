@@ -678,10 +678,7 @@ v &lt;- rms::validate(full.model, method=&quot;boot&quot;, bw=TRUE, rule=&quot;p
 shrinkage.factor &lt;- v[&quot;Slope&quot;,&quot;test&quot;]
 cat(&quot;Shrinkage factor     :&quot;, shrinkage.factor, &quot;\n&quot;)</code></pre>
 <pre><code>## Shrinkage factor     : 0.86825232</code></pre>
-<pre class="r"><code>save(shrinkage.factor, work.data, imputed.data, single.imputation, 
-     file=paste0(file.path, &quot;/Data/test.Rdata&quot;))
-
-# Optimism corrected C-index
+<pre class="r"><code># Optimism corrected C-index
 cindex.orig&lt;-(v[&quot;Dxy&quot;,&quot;index.orig&quot;]+1)/2   # original C-index
 optimism.C&lt;-v[&quot;Dxy&quot;,&quot;optimism&quot;]/2          # optimism C-index, /2 because  C.orig - C.B the +1 cancels out
 cindex.B&lt;-(v[&quot;Dxy&quot;,&quot;index.corrected&quot;]+1)/2 # index corrected C-index

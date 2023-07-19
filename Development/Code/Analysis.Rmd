@@ -221,8 +221,6 @@ v <- rms::validate(full.model, method="boot", bw=TRUE, rule="p", sls=0.05, B=100
 # Show shrinkage factor
 shrinkage.factor <- v["Slope","test"]
 cat("Shrinkage factor     :", shrinkage.factor, "\n")
-save(shrinkage.factor, work.data, imputed.data, single.imputation, 
-     file=paste0(file.path, "/Data/test.Rdata"))
 
 # Optimism corrected C-index
 cindex.orig<-(v["Dxy","index.orig"]+1)/2   # original C-index
