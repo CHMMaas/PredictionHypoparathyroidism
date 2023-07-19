@@ -513,7 +513,7 @@ functional.forms &lt;- list(
 model.AICs &lt;- c()
 for (functional.form in functional.forms){
   form &lt;- eval(parse(text=paste(&quot;HypoP ~&quot;, functional.form, &quot;+ BSKgezien + Age_Years + Sex + surgery_type + CHKD&quot;)))
-  model &lt;- rms::lrm(form, data=single.imputation) # TODO: SINGLE IMPUTATION
+  model &lt;- rms::lrm(form, data=single.imputation) # SINGLE IMPUTATION
   model.AICs &lt;- c(model.AICs, stats::AIC(model))
 }
 possible.predictors.df &lt;- as.data.frame(cbind(functional.forms, sprintf(&quot;%.1f&quot;, model.AICs)))
@@ -570,7 +570,7 @@ functional.forms &lt;- list(
 model.AICs &lt;- c()
 for (functional.form in functional.forms){
   form &lt;- eval(parse(text=paste(&quot;HypoP ~&quot;, functional.form, &quot;+ BSKgezien + Sex + surgery_type + CHKD&quot;)))
-  model &lt;- rms::lrm(form, data=single.imputation, # TODO: SINGLE IMPUTATION
+  model &lt;- rms::lrm(form, data=single.imputation, # SINGLE IMPUTATION
                     maxit=1000, x=TRUE, y=TRUE)
   model.AICs &lt;- c(model.AICs, stats::AIC(model))
 }
@@ -638,7 +638,7 @@ imputation</h1>
 best.flexible.model &lt;- rms::lrm(HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + BSKgezien + Age_Years + Sex + surgery_type + CHKD,
                                 data=single.imputation, # SINGLE IMPUTATION
                                 maxit=1000, x=TRUE, y=TRUE)
-lrtest(best.flexible.model, full.model.single) # TODO: mention single imputation</code></pre>
+lrtest(best.flexible.model, full.model.single)</code></pre>
 <pre><code>## 
 ## Model 1: HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + BSKgezien + Age_Years + 
 ##     Sex + surgery_type + CHKD
@@ -720,13 +720,13 @@ for (model.type in model.types){
   fitted.model &lt;- eval(parse(text=paste0(model.type, &quot;.model&quot;)))
   lp &lt;- predict(fitted.model)
   lp.shrunk &lt;- shrinkage.factor*lp
-  fit.extra &lt;- lrm.fit(y=single.imputation$HypoP,
+  fit.extra &lt;- lrm.fit(y=work.data$HypoP,
                         offset=lp.shrunk) # TODO: for each imputation?
   intercept.extra &lt;- coef(fit.extra)[1]
   intercept.shrunk &lt;- shrinkage.factor*fitted.model$coefficients[&quot;Intercept&quot;]+intercept.extra
   
   # check
-  mean(single.imputation$HypoP==&quot;Yes&quot;) # event probability
+  mean(work.data$HypoP==&quot;Yes&quot;) # event probability
   mean(plogis(lp.shrunk+intercept.extra))  # same
   
   # save results
@@ -944,12 +944,12 @@ for (i in 1:m){
                   coef.final.model.webapp[&quot;BSKgezien - Yes:No&quot;]*ifelse(selected.imputation$BSKgezien == &quot;Yes&quot;, 1, 0))
 }
 # if the majority of imputations gave high dPTH, consider this patient high dPTH
-table(single.imputation$HypoP, rowMeans(dPTH)&gt;0.7)</code></pre>
+table(work.data$HypoP, rowMeans(dPTH)&gt;0.7)</code></pre>
 <pre><code>##      
 ##       FALSE TRUE
 ##   No     23  299
 ##   Yes     0   44</code></pre>
-<pre class="r"><code>table(single.imputation$Readmission, rowMeans(dPTH)&gt;0.7)</code></pre>
+<pre class="r"><code>table(work.data$Readmission, rowMeans(dPTH)&gt;0.7)</code></pre>
 <pre><code>##      
 ##       FALSE TRUE
 ##   No     23  316
@@ -968,23 +968,23 @@ table(str.pred)</code></pre>
 ##    1    2    3 
 ## 62.6 20.2 17.2</code></pre>
 <pre class="r"><code># hypoP table
-table(single.imputation$HypoP, str.pred)</code></pre>
+table(work.data$HypoP, str.pred)</code></pre>
 <pre><code>##      str.pred
 ##         1   2   3
 ##   No  225  62  35
 ##   Yes   4  12  28</code></pre>
-<pre class="r"><code>round(table(single.imputation$HypoP, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)</code></pre>
+<pre class="r"><code>round(table(work.data$HypoP, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)</code></pre>
 <pre><code>##      str.pred
 ##          1    2    3
 ##   No  98.3 83.8 55.6
 ##   Yes  1.7 16.2 44.4</code></pre>
 <pre class="r"><code># readmission table
-table(single.imputation$Readmission, str.pred)</code></pre>
+table(work.data$Readmission, str.pred)</code></pre>
 <pre><code>##      str.pred
 ##         1   2   3
 ##   No  227  67  45
 ##   Yes   2   7  18</code></pre>
-<pre class="r"><code>round(table(single.imputation$Readmission, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)</code></pre>
+<pre class="r"><code>round(table(work.data$Readmission, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)</code></pre>
 <pre><code>##      str.pred
 ##          1    2    3
 ##   No  99.1 90.5 71.4

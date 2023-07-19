@@ -125,7 +125,7 @@ functional.forms <- list(
 model.AICs <- c()
 for (functional.form in functional.forms){
   form <- eval(parse(text=paste("HypoP ~", functional.form, "+ BSKgezien + Age_Years + Sex + surgery_type + CHKD")))
-  model <- rms::lrm(form, data=single.imputation) # TODO: SINGLE IMPUTATION
+  model <- rms::lrm(form, data=single.imputation) # SINGLE IMPUTATION
   model.AICs <- c(model.AICs, stats::AIC(model))
 }
 possible.predictors.df <- as.data.frame(cbind(functional.forms, sprintf("%.1f", model.AICs)))
@@ -172,7 +172,7 @@ functional.forms <- list(
 model.AICs <- c()
 for (functional.form in functional.forms){
   form <- eval(parse(text=paste("HypoP ~", functional.form, "+ BSKgezien + Sex + surgery_type + CHKD")))
-  model <- rms::lrm(form, data=single.imputation, # TODO: SINGLE IMPUTATION
+  model <- rms::lrm(form, data=single.imputation, # SINGLE IMPUTATION
                     maxit=1000, x=TRUE, y=TRUE)
   model.AICs <- c(model.AICs, stats::AIC(model))
 }
@@ -209,7 +209,7 @@ full.model.single <- rms::lrm(form.full.model, data=single.imputation, # SINGLE 
 best.flexible.model <- rms::lrm(HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + BSKgezien + Age_Years + Sex + surgery_type + CHKD,
                                 data=single.imputation, # SINGLE IMPUTATION
                                 maxit=1000, x=TRUE, y=TRUE)
-lrtest(best.flexible.model, full.model.single) # TODO: mention single imputation
+lrtest(best.flexible.model, full.model.single)
 ```
 
 # Calculate optimism using bootstrap using full model and doing backward selection for each bootstrap
@@ -263,13 +263,13 @@ for (model.type in model.types){
   fitted.model <- eval(parse(text=paste0(model.type, ".model")))
   lp <- predict(fitted.model)
   lp.shrunk <- shrinkage.factor*lp
-  fit.extra <- lrm.fit(y=single.imputation$HypoP,
+  fit.extra <- lrm.fit(y=work.data$HypoP,
                         offset=lp.shrunk) # TODO: for each imputation?
   intercept.extra <- coef(fit.extra)[1]
   intercept.shrunk <- shrinkage.factor*fitted.model$coefficients["Intercept"]+intercept.extra
   
   # check
-  mean(single.imputation$HypoP=="Yes") # event probability
+  mean(work.data$HypoP=="Yes") # event probability
   mean(plogis(lp.shrunk+intercept.extra))  # same
   
   # save results
@@ -469,8 +469,8 @@ for (i in 1:m){
                   coef.final.model.webapp["BSKgezien - Yes:No"]*ifelse(selected.imputation$BSKgezien == "Yes", 1, 0))
 }
 # if the majority of imputations gave high dPTH, consider this patient high dPTH
-table(single.imputation$HypoP, rowMeans(dPTH)>0.7)
-table(single.imputation$Readmission, rowMeans(dPTH)>0.7)
+table(work.data$HypoP, rowMeans(dPTH)>0.7)
+table(work.data$Readmission, rowMeans(dPTH)>0.7)
 
 # average predicted probability of all imputations
 pred <- rowMeans(exp(lp)/(1+exp(lp)))
@@ -481,10 +481,10 @@ table(str.pred)
 round(table(str.pred)/nrow(work.data)*100, 1)
 
 # hypoP table
-table(single.imputation$HypoP, str.pred)
-round(table(single.imputation$HypoP, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)
+table(work.data$HypoP, str.pred)
+round(table(work.data$HypoP, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)
 
 # readmission table
-table(single.imputation$Readmission, str.pred)
-round(table(single.imputation$Readmission, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)
+table(work.data$Readmission, str.pred)
+round(table(work.data$Readmission, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)
 ```
