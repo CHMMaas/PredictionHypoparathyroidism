@@ -125,7 +125,7 @@ functional.forms <- list(
 model.AICs <- c()
 for (functional.form in functional.forms){
   form <- eval(parse(text=paste("HypoP ~", functional.form, "+ BSKgezien + Age_Years + Sex + surgery_type + CHKD")))
-  model <- rms::lrm(form, data=single.imputation) # SINGLE IMPUTATION
+  model <- rms::lrm(form, data=single.imputation) # TODO: SINGLE IMPUTATION
   model.AICs <- c(model.AICs, stats::AIC(model))
 }
 possible.predictors.df <- as.data.frame(cbind(functional.forms, sprintf("%.1f", model.AICs)))
@@ -172,7 +172,7 @@ functional.forms <- list(
 model.AICs <- c()
 for (functional.form in functional.forms){
   form <- eval(parse(text=paste("HypoP ~", functional.form, "+ BSKgezien + Sex + surgery_type + CHKD")))
-  model <- rms::lrm(form, data=single.imputation, # SINGLE IMPUTATION
+  model <- rms::lrm(form, data=single.imputation, # TODO: SINGLE IMPUTATION
                     maxit=1000, x=TRUE, y=TRUE)
   model.AICs <- c(model.AICs, stats::AIC(model))
 }
@@ -209,7 +209,7 @@ full.model.single <- rms::lrm(form.full.model, data=single.imputation, # SINGLE 
 best.flexible.model <- rms::lrm(HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + BSKgezien + Age_Years + Sex + surgery_type + CHKD,
                                 data=single.imputation, # SINGLE IMPUTATION
                                 maxit=1000, x=TRUE, y=TRUE)
-lrtest(best.flexible.model, full.model.single)
+lrtest(best.flexible.model, full.model.single) # TODO: mention single imputation
 ```
 
 # Calculate optimism using bootstrap using full model and doing backward selection for each bootstrap
@@ -318,7 +318,8 @@ coef.final.model.webapp <- shrinkage.factor*summary(final.model,
                                    CorrCa24u=c(1, 2), 
                                    BSKgezien="No")[which(summary(final.model)[, "Type"]==1), 
                                                    c("Effect")]
-save(shrinkage.factor, final.intercept.shrunk, coef.final.model.webapp, 
+var.cov.final <- vcov(final.model)
+save(shrinkage.factor, final.intercept.shrunk, coef.final.model.webapp, var.cov.final,
      file=paste0(file.path, "/Results/final.model.Rdata"))
 ```
 
@@ -399,6 +400,7 @@ openxlsx::write.xlsx(final.table,
 # 4 splits
 table(work.data$Validatie1)
 Centers <- levels(work.data$Validatie1)
+Centers.title <- paste("Cohort", 1:4)
 for (type in c("full", "final")){
   for (j in 1:4){
     # split outcomes for center j and not j
@@ -410,7 +412,12 @@ for (type in c("full", "final")){
     form.notj <- update(form.model, y.notj  ~ . )
     
     # fit on 3 centers
-    model.notj <- rms::lrm(form.notj, data=single.imputation[work.data$Validatie1!=Centers[j],], x=TRUE, y=TRUE)
+    model.notj <- Hmisc::fit.mult.impute(form.notj, lrm, 
+                                          xtrans=imputed.data,
+                                          data=work.data,
+                                          n.impute=m, pr=FALSE, fit.reps=TRUE, 
+                                          fitargs=list(y=TRUE, x=TRUE, se.fit=TRUE),
+                                          sub=work.data$Validatie1!=Centers[j])
     
     # TODO: calculate shrinkage?
     # v<-rms::validate(model.notj,method="boot",bw=TRUE,rule="p",sls=0.05,B=100,pr=FALSE,type="individual")
@@ -421,11 +428,15 @@ for (type in c("full", "final")){
     # print(shrinkage.factor.notj)
     
     # make prediction for 1 center
-    lp.j <- predict(model.notj, newdata=single.imputation[work.data$Validatie1==Centers[j],])
+    lp.j <- c()
+    for (i in 1:m){
+      data.i <- mice::complete(imputed.data, i)
+      lp.j <- cbind(lp.j, predict(model.notj, newdata=data.i[work.data$Validatie1==Centers[j],]))
+    }
 
     # make plot
     png(file=paste0(file.path, "Results/Figures/model.performance.", type, ".", Centers[j], ".png"))
-    out.j <- PredictionTools::val.prob.mi(lp.mi=lp.j, y=y.j, main=Centers[j], g=3, dist=TRUE)
+    out.j <- PredictionTools::val.prob.mi(lp.mi=lp.j, y=y.j, main=Centers.title[j], g=3, dist=TRUE)
     grDevices::dev.off()
   }
 }
@@ -460,6 +471,7 @@ for (i in 1:m){
                   coef.final.model.webapp["BSKgezien - Yes:No"]*ifelse(selected.imputation$BSKgezien == "Yes", 1, 0))
 }
 # if the majority of imputations gave high dPTH, consider this patient high dPTH
+table(single.imputation$HypoP, rowMeans(dPTH)>0.7)
 table(single.imputation$Readmission, rowMeans(dPTH)>0.7)
 
 # average predicted probability of all imputations
@@ -469,8 +481,12 @@ pred <- rowMeans(exp(lp)/(1+exp(lp)))
 str.pred <- ifelse(pred<0.1, 1, ifelse(pred>0.3, 3, 2))
 table(str.pred)
 round(table(str.pred)/nrow(work.data)*100, 1)
-# absolute numbers
+
+# hypoP table
+table(single.imputation$HypoP, str.pred)
+round(table(single.imputation$HypoP, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)
+
+# readmission table
 table(single.imputation$Readmission, str.pred)
-# percentages
 round(table(single.imputation$Readmission, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)
 ```

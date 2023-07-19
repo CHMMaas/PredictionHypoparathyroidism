@@ -56,13 +56,19 @@ lp <- test.model$coefficients["Intercept"]+
   test.coef["dPTH"]*test.patient["dPTH"]+
   test.coef["CorrCa24u"]*test.patient["CorrCa24u"]+
   test.coef["BSKgezien - Yes:No"]*as.numeric(test.patient["BSKgezien"]=="Yes")
+patient <- c(1, as.numeric(test.patient["dPTH"]), as.numeric(test.patient["BSKgezien"]=="Yes"), as.numeric(test.patient["CorrCa24u"]))
+se <- sqrt(t(patient) %*% vcov(test.model) %*% patient)
+predict(test.model, newdata=test.patient, se.fit=TRUE) # lp = -0.44055907, se = 0.48530635
 p <- exp(as.numeric(lp))/(1+exp(as.numeric(lp)))*100
+p.lower <- exp(as.numeric(lp))/(1+exp(as.numeric(lp)))*100
 
 lp.mi <- test.model.mi$coefficients["Intercept"]+
   test.coef.mi["dPTH"]*test.patient["dPTH"]+
   test.coef.mi["CorrCa24u"]*test.patient["CorrCa24u"]+
   test.coef.mi["BSKgezien - Yes:No"]*as.numeric(test.patient["BSKgezien"]=="Yes")
 p.mi <- exp(as.numeric(lp.mi))/(1+exp(as.numeric(lp.mi)))*100
+se.mi <- sqrt(t(C) %*% vcov(test.model.mi) %*% C)
+predict(test.model.mi, newdata=test.patient, se.fit=TRUE)
 
 lp.mi.shr <- intercept.shrunk+
   test.coef.mi.shr["dPTH"]*test.patient["dPTH"]+

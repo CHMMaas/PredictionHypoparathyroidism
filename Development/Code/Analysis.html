@@ -485,8 +485,8 @@ mi_long &lt;- mice::complete(mi, action = &quot;long&quot;, include = T)
 mi_long$dPTH &lt;- ((mi_long$BaselinePTH - mi_long$PTH24u)/mi_long$BaselinePTH*100)
 mi_long$CorrCaBaseline &lt;- mi_long$BaseCa +((34-mi_long$Basealbu)*0.016)
 mi_long$CorrCa24u &lt;- mi_long$Ca24u +((34-mi_long$Albu24u)*0.016)
-mi_long$dCorrCa24u &lt;- ((mi_long$CorrCaBaseline - mi_long$CorrCa24u)/mi_long$CorrCaBaseline*100)
-mi_long$dCa24u &lt;- ((mi_long$BaseCa - mi_long$Ca24u)/mi_long$BaseCa*100)
+mi_long$dCorrCa &lt;- ((mi_long$CorrCaBaseline - mi_long$CorrCa24u)/mi_long$CorrCaBaseline*100)
+mi_long$dCa &lt;- ((mi_long$BaseCa - mi_long$Ca24u)/mi_long$BaseCa*100)
 
 # imputed data into mice format
 imputed.data &lt;- as.mids(mi_long)
@@ -500,20 +500,20 @@ options(digits=8)</code></pre>
 <div id="functional-form---possible-predictors" class="section level1">
 <h1>1. Functional form - possible predictors</h1>
 <pre class="r"><code># include either PTH24u or dPTH
-# include either Ca24u or CorrCa24u or dCa24u or dCorrCa24u
+# include either Ca24u or CorrCa24u or dCa or dCorrCa
 functional.forms &lt;- list(
   &quot;PTH24u + Ca24u&quot;,
   &quot;PTH24u + CorrCa24u&quot;,
-  &quot;PTH24u + dCa24u&quot;,
-  &quot;PTH24u + dCorrCa24u&quot;,
+  &quot;PTH24u + dCa&quot;,
+  &quot;PTH24u + dCorrCa&quot;,
   &quot;dPTH + Ca24u&quot;,
   &quot;dPTH + CorrCa24u&quot;, # BEST and clinically most practical
-  &quot;dPTH + dCa24u&quot;,
-  &quot;dPTH + dCorrCa24u&quot;)
+  &quot;dPTH + dCa&quot;,
+  &quot;dPTH + dCorrCa&quot;)
 model.AICs &lt;- c()
 for (functional.form in functional.forms){
   form &lt;- eval(parse(text=paste(&quot;HypoP ~&quot;, functional.form, &quot;+ BSKgezien + Age_Years + Sex + surgery_type + CHKD&quot;)))
-  model &lt;- rms::lrm(form, data=single.imputation) # SINGLE IMPUTATION
+  model &lt;- rms::lrm(form, data=single.imputation) # TODO: SINGLE IMPUTATION
   model.AICs &lt;- c(model.AICs, stats::AIC(model))
 }
 possible.predictors.df &lt;- as.data.frame(cbind(functional.forms, sprintf(&quot;%.1f&quot;, model.AICs)))
@@ -521,15 +521,15 @@ openxlsx::write.xlsx(possible.predictors.df,
             rowNames=FALSE,
             file=paste0(file.path, &quot;/Results/functional.form.xlsx&quot;))
 print(cbind(functional.forms, model.AICs))</code></pre>
-<pre><code>##      functional.forms      model.AICs
-## [1,] &quot;PTH24u + Ca24u&quot;      205.88306 
-## [2,] &quot;PTH24u + CorrCa24u&quot;  200.70261 
-## [3,] &quot;PTH24u + dCa24u&quot;     211.11102 
-## [4,] &quot;PTH24u + dCorrCa24u&quot; 207.9445  
-## [5,] &quot;dPTH + Ca24u&quot;        186.73791 
-## [6,] &quot;dPTH + CorrCa24u&quot;    182.68987 
-## [7,] &quot;dPTH + dCa24u&quot;       190.35074 
-## [8,] &quot;dPTH + dCorrCa24u&quot;   188.27887</code></pre>
+<pre><code>##      functional.forms     model.AICs
+## [1,] &quot;PTH24u + Ca24u&quot;     205.88306 
+## [2,] &quot;PTH24u + CorrCa24u&quot; 200.70261 
+## [3,] &quot;PTH24u + dCa&quot;       211.11102 
+## [4,] &quot;PTH24u + dCorrCa&quot;   207.9445  
+## [5,] &quot;dPTH + Ca24u&quot;       186.73791 
+## [6,] &quot;dPTH + CorrCa24u&quot;   182.68987 
+## [7,] &quot;dPTH + dCa&quot;         190.35074 
+## [8,] &quot;dPTH + dCorrCa&quot;     188.27887</code></pre>
 <pre class="r"><code>cat(&quot;Minimum AIC:&quot;, which(model.AICs==min(model.AICs)))</code></pre>
 <pre><code>## Minimum AIC: 6</code></pre>
 <pre class="r"><code># Warning message means that we predict exact 0 and 1 due to smalls ample size (see https://www.statology.org/glm-fit-fitted-probabilities-numerically-0-or-1-occurred/)</code></pre>
@@ -570,7 +570,7 @@ functional.forms &lt;- list(
 model.AICs &lt;- c()
 for (functional.form in functional.forms){
   form &lt;- eval(parse(text=paste(&quot;HypoP ~&quot;, functional.form, &quot;+ BSKgezien + Sex + surgery_type + CHKD&quot;)))
-  model &lt;- rms::lrm(form, data=single.imputation, # SINGLE IMPUTATION
+  model &lt;- rms::lrm(form, data=single.imputation, # TODO: SINGLE IMPUTATION
                     maxit=1000, x=TRUE, y=TRUE)
   model.AICs &lt;- c(model.AICs, stats::AIC(model))
 }
@@ -638,7 +638,7 @@ imputation</h1>
 best.flexible.model &lt;- rms::lrm(HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + BSKgezien + Age_Years + Sex + surgery_type + CHKD,
                                 data=single.imputation, # SINGLE IMPUTATION
                                 maxit=1000, x=TRUE, y=TRUE)
-lrtest(best.flexible.model, full.model.single)</code></pre>
+lrtest(best.flexible.model, full.model.single) # TODO: mention single imputation</code></pre>
 <pre><code>## 
 ## Model 1: HypoP ~ rms::rcs(dPTH, 4) + CorrCa24u + BSKgezien + Age_Years + 
 ##     Sex + surgery_type + CHKD
@@ -776,7 +776,8 @@ coef.final.model.webapp &lt;- shrinkage.factor*summary(final.model,
                                    CorrCa24u=c(1, 2), 
                                    BSKgezien=&quot;No&quot;)[which(summary(final.model)[, &quot;Type&quot;]==1), 
                                                    c(&quot;Effect&quot;)]
-save(shrinkage.factor, final.intercept.shrunk, coef.final.model.webapp, 
+var.cov.final &lt;- vcov(final.model)
+save(shrinkage.factor, final.intercept.shrunk, coef.final.model.webapp, var.cov.final,
      file=paste0(file.path, &quot;/Results/final.model.Rdata&quot;))</code></pre>
 </div>
 <div id="assess-performance" class="section level1">
@@ -875,6 +876,7 @@ table(work.data$Validatie1)</code></pre>
 ## Buiten_regio   EMC_na2017 EMC_voor2017        Regio 
 ##           62          110          116           78</code></pre>
 <pre class="r"><code>Centers &lt;- levels(work.data$Validatie1)
+Centers.title &lt;- paste(&quot;Cohort&quot;, 1:4)
 for (type in c(&quot;full&quot;, &quot;final&quot;)){
   for (j in 1:4){
     # split outcomes for center j and not j
@@ -886,7 +888,12 @@ for (type in c(&quot;full&quot;, &quot;final&quot;)){
     form.notj &lt;- update(form.model, y.notj  ~ . )
     
     # fit on 3 centers
-    model.notj &lt;- rms::lrm(form.notj, data=single.imputation[work.data$Validatie1!=Centers[j],], x=TRUE, y=TRUE)
+    model.notj &lt;- Hmisc::fit.mult.impute(form.notj, lrm, 
+                                          xtrans=imputed.data,
+                                          data=work.data,
+                                          n.impute=m, pr=FALSE, fit.reps=TRUE, 
+                                          fitargs=list(y=TRUE, x=TRUE, se.fit=TRUE),
+                                          sub=work.data$Validatie1!=Centers[j])
     
     # TODO: calculate shrinkage?
     # v&lt;-rms::validate(model.notj,method=&quot;boot&quot;,bw=TRUE,rule=&quot;p&quot;,sls=0.05,B=100,pr=FALSE,type=&quot;individual&quot;)
@@ -897,11 +904,15 @@ for (type in c(&quot;full&quot;, &quot;final&quot;)){
     # print(shrinkage.factor.notj)
     
     # make prediction for 1 center
-    lp.j &lt;- predict(model.notj, newdata=single.imputation[work.data$Validatie1==Centers[j],])
+    lp.j &lt;- c()
+    for (i in 1:m){
+      data.i &lt;- mice::complete(imputed.data, i)
+      lp.j &lt;- cbind(lp.j, predict(model.notj, newdata=data.i[work.data$Validatie1==Centers[j],]))
+    }
 
     # make plot
     png(file=paste0(file.path, &quot;Results/Figures/model.performance.&quot;, type, &quot;.&quot;, Centers[j], &quot;.png&quot;))
-    out.j &lt;- PredictionTools::val.prob.mi(lp.mi=lp.j, y=y.j, main=Centers[j], g=3, dist=TRUE)
+    out.j &lt;- PredictionTools::val.prob.mi(lp.mi=lp.j, y=y.j, main=Centers.title[j], g=3, dist=TRUE)
     grDevices::dev.off()
   }
 }
@@ -936,7 +947,12 @@ for (i in 1:m){
                   coef.final.model.webapp[&quot;BSKgezien - Yes:No&quot;]*ifelse(selected.imputation$BSKgezien == &quot;Yes&quot;, 1, 0))
 }
 # if the majority of imputations gave high dPTH, consider this patient high dPTH
-table(single.imputation$Readmission, rowMeans(dPTH)&gt;0.7)</code></pre>
+table(single.imputation$HypoP, rowMeans(dPTH)&gt;0.7)</code></pre>
+<pre><code>##      
+##       FALSE TRUE
+##   No     23  299
+##   Yes     0   44</code></pre>
+<pre class="r"><code>table(single.imputation$Readmission, rowMeans(dPTH)&gt;0.7)</code></pre>
 <pre><code>##      
 ##       FALSE TRUE
 ##   No     23  316
@@ -954,14 +970,24 @@ table(str.pred)</code></pre>
 <pre><code>## str.pred
 ##    1    2    3 
 ## 62.6 20.2 17.2</code></pre>
-<pre class="r"><code># absolute numbers
+<pre class="r"><code># hypoP table
+table(single.imputation$HypoP, str.pred)</code></pre>
+<pre><code>##      str.pred
+##         1   2   3
+##   No  225  62  35
+##   Yes   4  12  28</code></pre>
+<pre class="r"><code>round(table(single.imputation$HypoP, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)</code></pre>
+<pre><code>##      str.pred
+##          1    2    3
+##   No  98.3 83.8 55.6
+##   Yes  1.7 16.2 44.4</code></pre>
+<pre class="r"><code># readmission table
 table(single.imputation$Readmission, str.pred)</code></pre>
 <pre><code>##      str.pred
 ##         1   2   3
 ##   No  227  67  45
 ##   Yes   2   7  18</code></pre>
-<pre class="r"><code># percentages
-round(table(single.imputation$Readmission, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)</code></pre>
+<pre class="r"><code>round(table(single.imputation$Readmission, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)</code></pre>
 <pre><code>##      str.pred
 ##          1    2    3
 ##   No  99.1 90.5 71.4
