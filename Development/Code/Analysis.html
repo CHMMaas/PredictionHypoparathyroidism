@@ -941,15 +941,15 @@ for (i in 1:m){
                   coef.final.model.webapp[&quot;BSKgezien - Yes:No&quot;]*ifelse(selected.imputation$BSKgezien == &quot;Yes&quot;, 1, 0))
 }
 # if the majority of imputations gave high dPTH, consider this patient high dPTH
-table(work.data$HypoP, rowMeans(dPTH)&gt;0.7)</code></pre>
+table(work.data$HypoP, rowMeans(dPTH)&gt;70)</code></pre>
 <pre><code>##      
 ##       FALSE TRUE
-##   No     23  299
-##   Yes     0   44</code></pre>
-<pre class="r"><code>table(work.data$Readmission, rowMeans(dPTH)&gt;0.7)</code></pre>
+##   No    214  108
+##   Yes     3   41</code></pre>
+<pre class="r"><code>table(work.data$Readmission, rowMeans(dPTH)&gt;70)</code></pre>
 <pre><code>##      
 ##       FALSE TRUE
-##   No     23  316
+##   No    217  122
 ##   Yes     0   27</code></pre>
 <pre class="r"><code># average predicted probability of all imputations
 pred &lt;- rowMeans(exp(lp)/(1+exp(lp)))
