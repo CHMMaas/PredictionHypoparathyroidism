@@ -384,10 +384,7 @@ Cindex.table <- c("C-index",
                   sprintf("%.2f", out.simple$cindex-optimism.C), 
                   paste0("[", sprintf("%.2f", out.simple$cindex.lower-optimism.C), "; ", sprintf("%.2f", out.simple$cindex.upper-optimism.C), "]"),
                   "")
-combined.table <- rbind(OR.table, Cindex.table)
-final.table <- cbind(combined.table[, 1:4], rep("", nrow(combined.table)),
-                     combined.table[, 5:7], rep("", nrow(combined.table)),
-                     combined.table[, 8:10])
+final.table <- rbind(OR.table, Cindex.table)
 openxlsx::write.xlsx(final.table,
             rowNames=FALSE,
             file=paste0(file.path, "/Results/model.xlsx"))

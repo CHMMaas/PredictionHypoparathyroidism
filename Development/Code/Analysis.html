@@ -857,10 +857,7 @@ Cindex.table &lt;- c(&quot;C-index&quot;,
                   sprintf(&quot;%.2f&quot;, out.simple$cindex-optimism.C), 
                   paste0(&quot;[&quot;, sprintf(&quot;%.2f&quot;, out.simple$cindex.lower-optimism.C), &quot;; &quot;, sprintf(&quot;%.2f&quot;, out.simple$cindex.upper-optimism.C), &quot;]&quot;),
                   &quot;&quot;)
-combined.table &lt;- rbind(OR.table, Cindex.table)
-final.table &lt;- cbind(combined.table[, 1:4], rep(&quot;&quot;, nrow(combined.table)),
-                     combined.table[, 5:7], rep(&quot;&quot;, nrow(combined.table)),
-                     combined.table[, 8:10])
+final.table &lt;- rbind(OR.table, Cindex.table)
 openxlsx::write.xlsx(final.table,
             rowNames=FALSE,
             file=paste0(file.path, &quot;/Results/model.xlsx&quot;))</code></pre>
