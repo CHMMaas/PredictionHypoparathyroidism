@@ -712,8 +712,8 @@ final.model &lt;- Hmisc::fit.mult.impute(form.final.model, lrm,
                                           n.impute=m, pr=FALSE, fit.reps=TRUE, 
                                           fitargs=list(y=TRUE, x=TRUE, se.fit=TRUE))</code></pre>
 </div>
-<div id="save-results-of-full-model" class="section level1">
-<h1>Save results of full model</h1>
+<div id="save-results-of-full-final-and-simple-model" class="section level1">
+<h1>Save results of full, final, and simple model</h1>
 <pre class="r"><code>model.types &lt;- c(&quot;full&quot;, &quot;final&quot;, &quot;simple&quot;)
 for (model.type in model.types){
   # new intercept after shrinkage
@@ -847,7 +847,7 @@ OR.table &lt;- data.frame(names=names.coef,
                                             rep(&quot;&quot;, 6)),
                                 Chi.simple=c(&quot;&quot;, sprintf(&quot;%.1f&quot;, an.simple[-nrow(an.simple), &quot;Chi-Square&quot;]),
                                              rep(&quot;&quot;, 6)))
-Cindex.table &lt;- c(&quot;C-index&quot;,
+Cindex.table &lt;- c(&quot;C-index optimism-corrected&quot;,
                   sprintf(&quot;%.2f&quot;, out.full$cindex-optimism.C), 
                   paste0(&quot;[&quot;, sprintf(&quot;%.2f&quot;, out.full$cindex.lower-optimism.C), &quot;; &quot;, sprintf(&quot;%.2f&quot;, out.full$cindex.upper-optimism.C), &quot;]&quot;),
                   &quot;&quot;,
@@ -860,7 +860,7 @@ Cindex.table &lt;- c(&quot;C-index&quot;,
 final.table &lt;- rbind(OR.table, Cindex.table)
 openxlsx::write.xlsx(final.table,
             rowNames=FALSE,
-            file=paste0(file.path, &quot;/Results/model.xlsx&quot;))</code></pre>
+            file=paste0(file.path, &quot;/Results/hypopara.model.xlsx&quot;))</code></pre>
 </div>
 <div id="assess-leave-one-center-out-cross-validation" class="section level1">
 <h1>Assess leave-one-center-out cross-validation</h1>
@@ -987,6 +987,292 @@ table(work.data$Readmission, str.pred)</code></pre>
 ##          1    2    3
 ##   No  99.1 90.5 71.4
 ##   Yes  0.9  9.5 28.6</code></pre>
+</div>
+<div id="full-readmission-model" class="section level1">
+<h1>Full readmission model</h1>
+<pre class="r"><code>form.refitted.full.model &lt;- Readmission ~ dPTH + 
+  CorrCa24u + 
+  BSKgezien + 
+  Age_Years + 
+  Sex +
+  surgery_type +
+  CHKD
+refitted.full.model &lt;- Hmisc::fit.mult.impute(form.refitted.full.model, lrm, 
+                                          xtrans=imputed.data,
+                                          data=work.data,
+                                          n.impute=m, pr=FALSE, fit.reps=TRUE, 
+                                          fitargs=list(y=TRUE, x=TRUE, se.fit=TRUE))
+summary(refitted.full.model)</code></pre>
+<pre><code>##              Effects              Response : Readmission 
+## 
+##  Factor                          Low    High   Diff.  Effect    S.E.   
+##  dPTH                            38.194 84.882 46.687  3.998200 1.31020
+##   Odds Ratio                     38.194 84.882 46.687 54.501000      NA
+##  CorrCa24u                        1.966  2.164  0.198 -0.869120 0.32464
+##   Odds Ratio                      1.966  2.164  0.198  0.419320      NA
+##  Age_Years                       42.000 69.000 27.000  0.231690 0.41602
+##   Odds Ratio                     42.000 69.000 27.000  1.260700      NA
+##  BSKgezien - No:Yes               2.000  1.000     NA  0.257790 0.67238
+##   Odds Ratio                      2.000  1.000     NA  1.294100      NA
+##  Sex - Male:Female                1.000  2.000     NA -0.587280 0.52918
+##   Odds Ratio                      1.000  2.000     NA  0.555840      NA
+##  surgery_type - completion:total  2.000  1.000     NA -0.689500 1.14560
+##   Odds Ratio                      2.000  1.000     NA  0.501830      NA
+##  CHKD - Yes:No                    1.000  2.000     NA -0.052949 0.50521
+##   Odds Ratio                      1.000  2.000     NA  0.948430      NA
+##  Lower 0.95 Upper 0.95
+##   1.430200    6.56630 
+##   4.179500  710.71000 
+##  -1.505400   -0.23283 
+##   0.221930    0.79228 
+##  -0.583690    1.04710 
+##   0.557840    2.84930 
+##  -1.060100    1.57560 
+##   0.346430    4.83380 
+##  -1.624500    0.44990 
+##   0.197020    1.56820 
+##  -2.934900    1.55590 
+##   0.053135    4.73940 
+##  -1.043200    0.93725 
+##   0.352340    2.55300</code></pre>
+<pre class="r"><code>anova(refitted.full.model)</code></pre>
+<pre><code>##                 Wald Statistics          Response: Readmission 
+## 
+##  Factor       Chi-Square d.f. P     
+##  dPTH          9.31      1    0.0023
+##  CorrCa24u     7.17      1    0.0074
+##  BSKgezien     0.15      1    0.7014
+##  Age_Years     0.31      1    0.5776
+##  Sex           1.23      1    0.2671
+##  surgery_type  0.36      1    0.5473
+##  CHKD          0.01      1    0.9165
+##  TOTAL        22.34      7    0.0022</code></pre>
+</div>
+<div id="select-model-through-backward-selection-for-readmission-model" class="section level1">
+<h1>Select model through backward selection for readmission model</h1>
+<pre class="r"><code>form.redeveloped.model &lt;- Readmission ~ dPTH + 
+  CorrCa24u  
+  # BSKgezien + 
+  # Age_Years + 
+  # Sex 
+  # surgery_type
+  # CHKD
+redeveloped.model &lt;- Hmisc::fit.mult.impute(form.redeveloped.model, lrm, 
+                                          xtrans=imputed.data,
+                                          data=work.data,
+                                          n.impute=m, pr=FALSE, fit.reps=TRUE, 
+                                          fitargs=list(y=TRUE, x=TRUE, se.fit=TRUE))
+anova(redeveloped.model)</code></pre>
+<pre><code>##                 Wald Statistics          Response: Readmission 
+## 
+##  Factor     Chi-Square d.f. P     
+##  dPTH       10.21      1    0.0014
+##  CorrCa24u   7.29      1    0.0069
+##  TOTAL      19.65      2    0.0001</code></pre>
+</div>
+<div id="refitted-readmission-model" class="section level1">
+<h1>Refitted readmission model</h1>
+<pre class="r"><code>form.refitted.final.model &lt;- Readmission ~ dPTH + 
+  CorrCa24u +
+  BSKgezien 
+refitted.final.model &lt;- Hmisc::fit.mult.impute(form.refitted.final.model, lrm, 
+                                          xtrans=imputed.data,
+                                          data=work.data,
+                                          n.impute=m, pr=FALSE, fit.reps=TRUE, 
+                                          fitargs=list(y=TRUE, x=TRUE, se.fit=TRUE))</code></pre>
+</div>
+<div id="test-refitted-versus-redeveloped-model" class="section level1">
+<h1>Test refitted versus redeveloped model</h1>
+<pre class="r"><code># final model and refitted model have similar coefficients
+coef(final.model)</code></pre>
+<pre><code>##     Intercept          dPTH     CorrCa24u BSKgezien=Yes 
+##    0.83088915    0.08958992   -4.21952887   -1.57896646</code></pre>
+<pre class="r"><code>coef(refitted.final.model)</code></pre>
+<pre><code>##     Intercept          dPTH     CorrCa24u BSKgezien=Yes 
+##  -0.772812244   0.089449306  -4.364961346  -0.123535639</code></pre>
+<pre class="r"><code># BSKgezien seems to not be relevant for hypocalcemia-related readmissions
+coef(redeveloped.model)</code></pre>
+<pre><code>##    Intercept         dPTH    CorrCa24u 
+## -0.902428880  0.089515265 -4.355154468</code></pre>
+<pre class="r"><code>AIC(refitted.final.model)</code></pre>
+<pre><code>## [1] 142.17244</code></pre>
+<pre class="r"><code>AIC(redeveloped.model)</code></pre>
+<pre><code>## [1] 140.19648</code></pre>
+<pre class="r"><code># model without BSKgezien is better, but not significantly
+lrtest(refitted.final.model, redeveloped.model)</code></pre>
+<pre><code>## 
+## Model 1: Readmission ~ dPTH + CorrCa24u + BSKgezien
+## Model 2: Readmission ~ dPTH + CorrCa24u
+## 
+##  L.R. Chisq        d.f.           P 
+## 0.096212311 1.000000000 0.756423247</code></pre>
+</div>
+<div id="calibrated-readmission-model" class="section level1">
+<h1>Calibrated readmission model</h1>
+<pre class="r"><code>cal.fact &lt;- c()
+cal.fact.SE &lt;- c()
+for (i in 1:m){
+  lp.i &lt;- predict(final.model,
+                  newdata=mice::complete(imputed.data, i), 
+                  type=&quot;lp&quot;)
+  f.mi &lt;- rms::lrm(Readmission~lp.i,
+                     data=mice::complete(imputed.data, i),
+                     y=TRUE, x=TRUE)
+  cal.fact &lt;- c(cal.fact, stats::coef(f.mi)[2])
+  cal.fact.SE &lt;- c(cal.fact.SE, sqrt(diag(vcov(f.mi)))[2])
+}
+cal.fact.combined &lt;- PredictionTools::Rubin.combine(cal.fact, cal.fact.SE)
+
+# calibration factor is not significant from zero
+cal.fact.final &lt;- cal.fact.combined$est
+print(paste0(sprintf(&quot;%.2f&quot;, cal.fact.final), &quot; [&quot;,
+            sprintf(&quot;%.2f&quot;, cal.fact.final+qnorm(.025)*cal.fact.combined$se), &quot;; &quot;,
+            sprintf(&quot;%.2f&quot;, cal.fact.final+qnorm(.975)*cal.fact.combined$se), &quot;]&quot;))</code></pre>
+<pre><code>## [1] &quot;0.81 [0.46; 1.15]&quot;</code></pre>
+</div>
+<div id="calibratino-plots-of-readmission-models" class="section level1">
+<h1>Calibratino plots of readmission models</h1>
+<pre class="r"><code>lp.refitted.full &lt;- c()
+lp.refitted.final &lt;- c()
+lp.redeveloped &lt;- c()
+for (i in 1:m){
+  lp.refitted.full &lt;- predict(refitted.full.model,
+                  newdata=mice::complete(imputed.data, i), 
+                  type=&quot;lp&quot;)
+  lp.refitted.final &lt;- predict(refitted.final.model,
+                  newdata=mice::complete(imputed.data, i), 
+                  type=&quot;lp&quot;)
+  lp.redeveloped &lt;- predict(redeveloped.model,
+                  newdata=mice::complete(imputed.data, i), 
+                  type=&quot;lp&quot;)
+  lp.calibrated &lt;- cal.fact.final*predict(final.model,
+                                          newdata=mice::complete(imputed.data, i), 
+                                          type=&quot;lp&quot;)
+}
+
+model.types &lt;- c(&quot;refitted.full&quot;, &quot;refitted.final&quot;, &quot;calibrated&quot;, &quot;redeveloped&quot;)
+for (model.type in model.types){
+  lp.model &lt;- eval(parse(text=paste0(&quot;lp.&quot;, model.type)))
+  png(file=paste0(file.path, &quot;Results/model.performance.&quot;, model.type, &quot;.model.png&quot;), 
+    width=400, height=400, units=&quot;px&quot;)
+  cal.plot &lt;- PredictionTools::val.prob.mi(lp.mi=lp.model, dist=TRUE, 
+                             y=as.numeric(work.data$Readmission)-1)
+  dev.off()
+  assign(paste0(&quot;out.&quot;, model.type), cal.plot)
+}</code></pre>
+<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
+</div>
+<div id="save-results" class="section level1">
+<h1>Save results</h1>
+<pre class="r"><code>model.types &lt;- c(&quot;refitted.full&quot;, &quot;refitted.final&quot;, &quot;redeveloped&quot;, &quot;calibrated&quot;)
+for (model.type in model.types){
+  lp.model &lt;- eval(parse(text=paste0(&quot;lp.&quot;, model.type)))
+  if (model.type==&quot;calibrated&quot;){
+    fitted.model &lt;- final.model
+  } else{
+    fitted.model &lt;- eval(parse(text=paste0(model.type, &quot;.model&quot;)))
+  }
+  
+  # TODO: shrinkage factor
+  shrinkage.factor &lt;- 1
+  intercept.extra &lt;- 0
+  
+  # save coefficients
+  if (model.type==&quot;redeveloped&quot;){
+    summary.model &lt;- summary(fitted.model, 
+                           dPTH=c(0, 1),
+                           CorrCa24u=c(0.2, 0.1))[which(summary(fitted.model)[, &quot;Type&quot;]==1),]
+  } else{
+    summary.model &lt;- summary(fitted.model, 
+                           dPTH=c(0, 1),
+                           CorrCa24u=c(0.2, 0.1),
+                           BSKgezien=&quot;Yes&quot;)[which(summary(fitted.model)[, &quot;Type&quot;]==1), ]
+  }
+  coef.model &lt;- shrinkage.factor*summary.model[,  &quot;Effect&quot;]
+  CI.coef &lt;- summary.model[, c(&quot;Lower 0.95&quot;, &quot;Upper 0.95&quot;)]
+  if (model.type==&quot;calibrated&quot;){
+    coef.model &lt;- cal.fact.final*coef.model
+    CI.coef &lt;- cal.fact.final*CI.coef
+    
+    Int.CI.lower &lt;- cal.fact.final*(fitted.model$coefficients[&quot;Intercept&quot;]+qnorm(0.025)*sqrt(diag(fitted.model$var)[1]/nrow(work.data)))
+    Int.CI.upper &lt;- cal.fact.final*(fitted.model$coefficients[&quot;Intercept&quot;]+qnorm(0.975)*sqrt(diag(fitted.model$var)[1]/nrow(work.data)))
+  }
+  assign(paste0(&quot;coef.&quot;, model.type, &quot;.model&quot;), coef.model)
+  
+  # save variable importance
+  an &lt;- stats::anova(fitted.model)
+  assign(paste0(&quot;an.&quot;, model.type), an)
+  
+  # save CI
+  CI.df &lt;- exp(rbind(c(shrinkage.factor*Int.CI.lower+intercept.extra,
+                       shrinkage.factor*Int.CI.upper+intercept.extra),
+                     shrinkage.factor*CI.coef))
+  row.names(CI.df)[1] &lt;- c(&quot;Intercept&quot;) # give intercept a name
+
+  assign(paste0(&quot;CI.&quot;, model.type, &quot;.model&quot;), CI.df)
+  
+  assign(paste0(&quot;OR.&quot;, model.type, &quot;.model&quot;), 
+         exp(c(intercept.shrunk, coef.model)))
+}
+  # # new intercept after shrinkage
+  # lp &lt;- predict(fitted.model)
+  # lp.shrunk &lt;- shrinkage.factor*lp
+  # fit.extra &lt;- lrm.fit(y=work.data$HypoP,
+  #                       offset=lp.shrunk) # TODO: for each imputation?
+  # intercept.extra &lt;- coef(fit.extra)[1]
+  # intercept.shrunk &lt;- shrinkage.factor*fitted.model$coefficients[&quot;Intercept&quot;]+intercept.extra
+  # 
+  # # check
+  # mean(work.data$HypoP==&quot;Yes&quot;) # event probability
+  # mean(plogis(lp.shrunk+intercept.extra))  # same
+  # 
+  # # save results
+  # assign(paste0(model.type, &quot;.intercept.shrunk&quot;), intercept.shrunk)</code></pre>
+</div>
+<div id="save-table-1" class="section level1">
+<h1>Save table</h1>
+<pre class="r"><code>names.coef &lt;- c(&quot;Intercept&quot;, &quot;dPTH&quot;, &quot;CorrCa24u&quot;, &quot;BSKgezien - No:Yes&quot;, 
+                               &quot;Age_Years&quot;, &quot;Sex - Male:Female&quot;, 
+                               &quot;surgery_type - completion:total&quot;, &quot;CHKD - Yes:No&quot;)
+OR.table &lt;- data.frame(names=names.coef,
+                                coef.refitted.full=sprintf(&quot;%.2f&quot;, OR.refitted.full.model[names.coef]),
+                                CI.refitted.full=c(paste0(&quot;[&quot;, sprintf(&quot;%.2f&quot;, CI.refitted.full.model[names.coef, 1]), &quot;; &quot;, 
+                                               sprintf(&quot;%.2f&quot;, CI.refitted.full.model[names.coef, 2]), &quot;]&quot;)),
+                                Chi.refitted.full=c(&quot;&quot;, sprintf(&quot;%.1f&quot;, an.refitted.full[-nrow(an.refitted.full), &quot;Chi-Square&quot;])),
+                                coef.refitted.final=c(sprintf(&quot;%.2f&quot;, OR.refitted.final.model), rep(&quot;&quot;, 4)),
+                                CI.refitted.final=c(paste0(&quot;[&quot;, sprintf(&quot;%.2f&quot;, CI.refitted.final.model[, 1]), &quot;; &quot;, 
+                                               sprintf(&quot;%.2f&quot;, CI.refitted.final.model[, 2]), &quot;]&quot;),
+                                            rep(&quot;&quot;, 4)),
+                                Chi.refitted.final=c(&quot;&quot;, sprintf(&quot;%.1f&quot;, an.refitted.final[-nrow(an.refitted.final), &quot;Chi-Square&quot;]),
+                                             rep(&quot;&quot;, 4)),
+                                coef.calibrated=c(sprintf(&quot;%.2f&quot;, OR.calibrated.model), rep(&quot;&quot;, 4)),
+                                CI.calibrated=c(paste0(&quot;[&quot;, sprintf(&quot;%.2f&quot;, CI.calibrated.model[, 1]), &quot;; &quot;, 
+                                               sprintf(&quot;%.2f&quot;, CI.calibrated.model[, 2]), &quot;]&quot;),
+                                            rep(&quot;&quot;, 4)),
+                                Chi.calibrated=c(&quot;&quot;, sprintf(&quot;%.1f&quot;, an.calibrated[-nrow(an.calibrated), &quot;Chi-Square&quot;]),
+                                             rep(&quot;&quot;, 4)),
+                                coef.redeveloped=c(sprintf(&quot;%.2f&quot;, OR.redeveloped.model), rep(&quot;&quot;, 5)),
+                                CI.redeveloped=c(paste0(&quot;[&quot;, sprintf(&quot;%.2f&quot;, CI.redeveloped.model[, 1]), &quot;; &quot;, 
+                                               sprintf(&quot;%.2f&quot;, CI.redeveloped.model[, 2]), &quot;]&quot;), rep(&quot;&quot;, 5)),
+                                Chi.redeveloped=c(&quot;&quot;, sprintf(&quot;%.1f&quot;, an.redeveloped[-nrow(an.redeveloped), &quot;Chi-Square&quot;]),
+                                            rep(&quot;&quot;, 5)))
+Cindex.table &lt;- c(&quot;C-index&quot;,
+                  sprintf(&quot;%.2f&quot;, out.refitted.full$cindex), 
+                  paste0(&quot;[&quot;, sprintf(&quot;%.2f&quot;, out.refitted.full$cindex.lower), &quot;; &quot;, sprintf(&quot;%.2f&quot;, out.refitted.full$cindex.upper), &quot;]&quot;),
+                  &quot;&quot;,
+                  sprintf(&quot;%.2f&quot;, out.refitted.final$cindex), 
+                  paste0(&quot;[&quot;, sprintf(&quot;%.2f&quot;, out.refitted.final$cindex.lower), &quot;; &quot;, sprintf(&quot;%.2f&quot;, out.refitted.final$cindex.upper), &quot;]&quot;),
+                  &quot;&quot;,
+                  sprintf(&quot;%.2f&quot;, out.calibrated$cindex), 
+                  paste0(&quot;[&quot;, sprintf(&quot;%.2f&quot;, out.calibrated$cindex.lower), &quot;; &quot;, sprintf(&quot;%.2f&quot;, out.calibrated$cindex.upper), &quot;]&quot;),
+                  &quot;&quot;,
+                  sprintf(&quot;%.2f&quot;, out.redeveloped$cindex), 
+                  paste0(&quot;[&quot;, sprintf(&quot;%.2f&quot;, out.redeveloped$cindex.lower), &quot;; &quot;, sprintf(&quot;%.2f&quot;, out.redeveloped$cindex.upper), &quot;]&quot;),
+                  &quot;&quot;)
+final.table &lt;- rbind(OR.table, Cindex.table)
+openxlsx::write.xlsx(final.table,
+            rowNames=FALSE,
+            file=paste0(file.path, &quot;/Results/readmission.model.xlsx&quot;))</code></pre>
 </div>
 
 
