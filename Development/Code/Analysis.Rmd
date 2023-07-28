@@ -219,8 +219,8 @@ v <- rms::validate(full.model, method="boot", bw=TRUE, rule="p", sls=0.05, B=100
                    pr=FALSE, type="individual")
 
 # Show shrinkage factor
-shrinkage.factor <- v["Slope","test"]
-cat("Shrinkage factor     :", shrinkage.factor, "\n")
+shrinkage.factor.hypop <- v["Slope","test"]
+cat("Shrinkage factor     :", shrinkage.factor.hypop, "\n")
 
 # Optimism corrected C-index
 cindex.orig<-(v["Dxy","index.orig"]+1)/2   # original C-index
@@ -262,11 +262,11 @@ for (model.type in model.types){
   # new intercept after shrinkage
   fitted.model <- eval(parse(text=paste0(model.type, ".model")))
   lp <- predict(fitted.model)
-  lp.shrunk <- shrinkage.factor*lp
+  lp.shrunk <- shrinkage.factor.hypop*lp
   fit.extra <- lrm.fit(y=work.data$HypoP,
                         offset=lp.shrunk) # TODO: for each imputation?
   intercept.extra <- coef(fit.extra)[1]
-  intercept.shrunk <- shrinkage.factor*fitted.model$coefficients["Intercept"]+intercept.extra
+  intercept.shrunk <- shrinkage.factor.hypop*fitted.model$coefficients["Intercept"]+intercept.extra
   
   # check
   mean(work.data$HypoP=="Yes") # event probability
@@ -276,14 +276,14 @@ for (model.type in model.types){
   if (model.type=="simple"){
     summary.model <- summary(fitted.model, 
                            dPTH=c(0, 1))[which(summary(fitted.model)[, "Type"]==1),]
-    coef.model <- shrinkage.factor*summary.model["Effect"]
+    coef.model <- shrinkage.factor.hypop*summary.model["Effect"]
     CI.coef <- summary.model[c("Lower 0.95", "Upper 0.95")]
   } else{
     summary.model <- summary(fitted.model, 
                            dPTH=c(0, 1),
                            CorrCa24u=c(0.2, 0.1),
                            BSKgezien="Yes")[which(summary(fitted.model)[, "Type"]==1), ]
-    coef.model <- shrinkage.factor*summary.model[,  "Effect"]
+    coef.model <- shrinkage.factor.hypop*summary.model[,  "Effect"]
     CI.coef <- summary.model[, c("Lower 0.95", "Upper 0.95")]
   }
   
@@ -296,9 +296,9 @@ for (model.type in model.types){
   
   Int.CI.lower <- fitted.model$coefficients["Intercept"]+qnorm(0.025)*sqrt(diag(fitted.model$var)[1]/nrow(work.data))
   Int.CI.upper <- fitted.model$coefficients["Intercept"]+qnorm(0.975)*sqrt(diag(fitted.model$var)[1]/nrow(work.data))
-  CI.df <- exp(rbind(c(shrinkage.factor*Int.CI.lower+intercept.extra,
-                       shrinkage.factor*Int.CI.upper+intercept.extra),
-                     shrinkage.factor*CI.coef))
+  CI.df <- exp(rbind(c(shrinkage.factor.hypop*Int.CI.lower+intercept.extra,
+                       shrinkage.factor.hypop*Int.CI.upper+intercept.extra),
+                     shrinkage.factor.hypop*CI.coef))
   if (model.type!="simple"){
     row.names(CI.df)[1] <- c("Intercept") # give intercept a name
   } else{
@@ -310,15 +310,6 @@ for (model.type in model.types){
   assign(paste0("OR.", model.type, ".model"), 
          exp(c(intercept.shrunk, coef.model)))
 }
-
-coef.final.model.webapp <- shrinkage.factor*summary(final.model, 
-                                   dPTH=c(1, 2), 
-                                   CorrCa24u=c(1, 2), 
-                                   BSKgezien="No")[which(summary(final.model)[, "Type"]==1), 
-                                                   c("Effect")]
-var.cov.final <- vcov(final.model)
-save(shrinkage.factor, final.intercept.shrunk, coef.final.model.webapp, var.cov.final,
-     file=paste0(file.path, "/Results/final.model.Rdata"))
 ```
 
 # Assess performance
@@ -416,11 +407,11 @@ for (type in c("full", "final")){
     
     # TODO: calculate shrinkage?
     # v<-rms::validate(model.notj,method="boot",bw=TRUE,rule="p",sls=0.05,B=100,pr=FALSE,type="individual")
-    # shrinkage.factor.notj <- v["Slope","test"]
+    # shrinkage.factor.hypop.notj <- v["Slope","test"]
     
     # cat("Now calculating for center", Centers[j], "\n")
     # print(model.notj$coefficients)
-    # print(shrinkage.factor.notj)
+    # print(shrinkage.factor.hypop.notj)
     
     # make prediction for 1 center
     lp.j <- c()
@@ -449,42 +440,6 @@ for (type in c("full", "final")){
   }
   grDevices::dev.off()
 }
-```
-# dPTH and readmission
-```{r, eval=TRUE}
-dPTH <- c()
-lp <- c()
-for (i in 1:m){
-  selected.imputation <- mice::complete(imputed.data, i)
-  
-  dPTH <- cbind(dPTH, selected.imputation$dPTH)
-  
-  lp <- cbind(lp,
-              final.intercept.shrunk+
-                  coef.final.model.webapp["dPTH"]*selected.imputation$dPTH+
-                  coef.final.model.webapp["CorrCa24u"]*selected.imputation$CorrCa24u+
-                  coef.final.model.webapp["BSKgezien - Yes:No"]*ifelse(selected.imputation$BSKgezien == "Yes", 1, 0))
-}
-
-# if the majority of imputations gave high dPTH, consider this patient high dPTH
-table(work.data$HypoP, rowMeans(dPTH)>=70)
-table(work.data$Readmission, rowMeans(dPTH)>=70)
-
-# average predicted probability of all imputations
-pred <- rowMeans(exp(lp)/(1+exp(lp)))
-
-# predictions stratified
-str.pred <- ifelse(pred<0.1, 1, ifelse(pred>0.3, 3, 2))
-table(str.pred)
-round(table(str.pred)/nrow(work.data)*100, 1)
-
-# hypoP table
-table(work.data$HypoP, str.pred)
-round(table(work.data$HypoP, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)
-
-# readmission table
-table(work.data$Readmission, str.pred)
-round(table(work.data$Readmission, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)
 ```
 # Full readmission model
 ```{r, eval=TRUE}
@@ -518,6 +473,15 @@ redeveloped.model <- Hmisc::fit.mult.impute(form.redeveloped.model, lrm,
                                           n.impute=m, pr=FALSE, fit.reps=TRUE, 
                                           fitargs=list(y=TRUE, x=TRUE, se.fit=TRUE))
 anova(redeveloped.model)
+```
+# Shrinkage factor for readmission model
+```{r, eval=TRUE}
+v.readmission <- rms::validate(refitted.full.model, method="boot", bw=TRUE, rule="p", sls=0.05, B=1000,
+                   pr=FALSE, type="individual")
+# in each bootstrap BSKgezien is omitted, only dPTH and CorrCa24u remain
+shrinkage.factor.read <- v.readmission["Slope", "test"]
+cat("Shrinkage factor     :", shrinkage.factor.read, "\n")
+# similar shrinkage factor
 ```
 # Refitted readmission model
 ```{r, eval=TRUE}
@@ -586,12 +550,22 @@ for (i in 1:m){
                                           type="lp")
 }
 
-model.types <- c("refitted.full", "refitted.final", "calibrated", "redeveloped")
+model.types <- c("refitted.full", "refitted.final", "refitted.final.shrunk", 
+                 "calibrated", "redeveloped", "redeveloped.shrunk")
 for (model.type in model.types){
-  lp.model <- eval(parse(text=paste0("lp.", model.type)))
+  if (model.type=="refitted.final.shrunk"){
+    shrink.fact.cal.plot <- shrinkage.factor.hypop
+    lp.model <- lp.refitted.final
+  } else if (model.type=="redeveloped.shrunk"){
+    shrink.fact.cal.plot <- shrinkage.factor.read
+    lp.model <- lp.redeveloped
+  } else{
+    shrink.fact.cal.plot <- 1
+    lp.model <- eval(parse(text=paste0("lp.", model.type)))
+  }
   png(file=paste0(file.path, "Results/model.performance.", model.type, ".model.png"), 
     width=400, height=400, units="px")
-  cal.plot <- PredictionTools::val.prob.mi(lp.mi=lp.model, dist=TRUE, 
+  cal.plot <- PredictionTools::val.prob.mi(lp.mi=shrink.fact.cal.plot*lp.model, dist=TRUE, 
                              y=as.numeric(work.data$Readmission)-1)
   dev.off()
   assign(paste0("out.", model.type), cal.plot)
@@ -609,8 +583,8 @@ for (model.type in model.types){
   }
   
   # TODO: shrinkage factor
-  shrinkage.factor <- 1
-  intercept.extra <- 0
+  shrinkage.factor.readmission <- 1
+  intercept.extra.readmission <- 0
   
   # save coefficients
   if (model.type=="redeveloped"){
@@ -623,7 +597,7 @@ for (model.type in model.types){
                            CorrCa24u=c(0.2, 0.1),
                            BSKgezien="Yes")[which(summary(fitted.model)[, "Type"]==1), ]
   }
-  coef.model <- shrinkage.factor*summary.model[,  "Effect"]
+  coef.model <- shrinkage.factor.readmission*summary.model[,  "Effect"]
   CI.coef <- summary.model[, c("Lower 0.95", "Upper 0.95")]
   if (model.type=="calibrated"){
     coef.model <- cal.fact.final*coef.model
@@ -639,9 +613,9 @@ for (model.type in model.types){
   assign(paste0("an.", model.type), an)
   
   # save CI
-  CI.df <- exp(rbind(c(shrinkage.factor*Int.CI.lower+intercept.extra,
-                       shrinkage.factor*Int.CI.upper+intercept.extra),
-                     shrinkage.factor*CI.coef))
+  CI.df <- exp(rbind(c(shrinkage.factor.readmission*Int.CI.lower+intercept.extra.readmission,
+                       shrinkage.factor.readmission*Int.CI.upper+intercept.extra.readmission),
+                     shrinkage.factor.readmission*CI.coef))
   row.names(CI.df)[1] <- c("Intercept") # give intercept a name
 
   assign(paste0("CI.", model.type, ".model"), CI.df)
@@ -651,15 +625,15 @@ for (model.type in model.types){
 }
   # # new intercept after shrinkage
   # lp <- predict(fitted.model)
-  # lp.shrunk <- shrinkage.factor*lp
+  # lp.shrunk <- shrinkage.factor.readmission*lp
   # fit.extra <- lrm.fit(y=work.data$HypoP,
   #                       offset=lp.shrunk) # TODO: for each imputation?
-  # intercept.extra <- coef(fit.extra)[1]
-  # intercept.shrunk <- shrinkage.factor*fitted.model$coefficients["Intercept"]+intercept.extra
+  # intercept.extra.readmission <- coef(fit.extra)[1]
+  # intercept.shrunk <- shrinkage.factor.readmission*fitted.model$coefficients["Intercept"]+intercept.extra.readmission
   # 
   # # check
   # mean(work.data$HypoP=="Yes") # event probability
-  # mean(plogis(lp.shrunk+intercept.extra))  # same
+  # mean(plogis(lp.shrunk+intercept.extra.readmission))  # same
   # 
   # # save results
   # assign(paste0(model.type, ".intercept.shrunk"), intercept.shrunk)
@@ -709,4 +683,77 @@ openxlsx::write.xlsx(final.table,
             rowNames=FALSE,
             file=paste0(file.path, "/Results/readmission.model.xlsx"))
 
+```
+# Save for webapp
+```{r, eval=TRUE}
+coef.hypop.model.webapp <- shrinkage.factor.hypop*summary(final.model, 
+                                   dPTH=c(1, 2), 
+                                   CorrCa24u=c(1, 2), 
+                                   BSKgezien="No")[which(summary(final.model)[, "Type"]==1), 
+                                                   c("Effect")]
+coef.readmission.model.webapp <- summary(refitted.final.model, 
+                                   dPTH=c(1, 2), 
+                                   CorrCa24u=c(1, 2), 
+                                   BSKgezien="No")[which(summary(refitted.final.model)[, "Type"]==1), 
+                                                   c("Effect")]
+intercept.readmission <- coef(refitted.final.model)[1]
+var.cov.hypop <- vcov(final.model)
+var.cov.readmission <- vcov(refitted.final.model)
+save(shrinkage.factor.hypop, final.intercept.shrunk, intercept.readmission,
+     coef.hypop.model.webapp, coef.readmission.model.webapp,
+     var.cov.hypop, var.cov.readmission,
+     single.imputation, refitted.final.model, redeveloped.model,
+     imputed.data, work.data, shrinkage.factor.read,
+     file=paste0(file.path, "/Results/final.model.Rdata"))
+```
+# dPTH and readmission
+```{r, eval=TRUE}
+dPTH <- c()
+lp <- c()
+for (i in 1:m){
+  selected.imputation <- mice::complete(imputed.data, i)
+  
+  dPTH <- cbind(dPTH, selected.imputation$dPTH)
+  
+  lp <- cbind(lp,
+              final.intercept.shrunk+
+                  coef.hypop.model.webapp["dPTH"]*selected.imputation$dPTH+
+                  coef.hypop.model.webapp["CorrCa24u"]*selected.imputation$CorrCa24u+
+                  coef.hypop.model.webapp["BSKgezien - Yes:No"]*ifelse(selected.imputation$BSKgezien == "Yes", 1, 0))
+}
+
+# if the majority of imputations gave high dPTH, consider this patient high dPTH
+table(work.data$HypoP, rowMeans(dPTH)>=70)
+table(work.data$Readmission, rowMeans(dPTH)>=70)
+
+# average predicted probability of all imputations
+pred <- rowMeans(exp(lp)/(1+exp(lp)))
+
+# predictions stratified
+str.pred <- ifelse(pred<0.1, 1, ifelse(pred>0.3, 3, 2))
+table(str.pred)
+round(table(str.pred)/nrow(work.data)*100, 1)
+
+# hypoP table
+table(work.data$HypoP, str.pred)
+round(table(work.data$HypoP, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)
+
+# readmission table
+table(work.data$Readmission, str.pred)
+round(table(work.data$Readmission, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)
+```
+# Compare predictions for HypoP and Readmission model
+```{r, eval=TRUE}
+plot(plogis(shrinkage.factor.hypop*predict(final.model, type="lp")), 
+     plogis(shrinkage.factor.hypop*predict(refitted.final.model, type="lp")),
+     xlab="Probability of Hypoparathyroidism", xlim=c(0, 1),
+     ylab="Probability of Readmission", ylim=c(0, 1),
+     main="Both shrunk with hypoP factor")
+abline(0, 1)
+plot(plogis(shrinkage.factor.hypop*predict(final.model, type="lp")), 
+     plogis(shrinkage.factor.read*predict(redeveloped.model, type="lp")),
+     xlab="Probability of Hypoparathyroidism", xlim=c(0, 1),
+     ylab="Probability of Readmission", ylim=c(0, 1),
+     main="Both shrunk and both redeveloped")
+abline(0, 1)
 ```
