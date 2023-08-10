@@ -149,9 +149,26 @@ form.flexible.model <- HypoP ~ rms::rcs(dPTH, 4) +
   CHKD
 flexible.model <- rms::lrm(form.flexible.model, data=single.imputation, 
                            maxit=1000, x=TRUE, y=TRUE)
-grDevices::png(file=paste0(file.path, "Results/plot.Predict.png"))
-plot(Predict(flexible.model))
+
+# make plot.predict figure
+p <- Predict(flexible.model)
+# rename
+re <- c(dPTH="dPTH", Sex="Sex", surgery_type="Surgery type",
+        Age_Years="Age in years", BSKgezien="Parathyroid seen",
+        CHKD="Central LND", CorrCa24u="Corrected calcium at 24 hours")
+for(n in names(re)) {
+  names(p)[names(p)==n] <- re[n]
+  p$.predictor.[p$.predictor.==n] <- re[n]
+  }
+grDevices::png(file=paste0(file.path, "Results/plot.Predict.png"),
+               width=1000, height=500)
+plot(p, ylim=c(-15, 5))
 grDevices::dev.off()
+grDevices::png(file=paste0(file.path, "Results/plot.Predict.dPTH.png"),
+               width=1000, height=1000)
+plot(p)
+grDevices::dev.off()
+
 
 # check if dPTH, CorrCa or age need to be modelled non-linearly
 functional.forms <- list(
