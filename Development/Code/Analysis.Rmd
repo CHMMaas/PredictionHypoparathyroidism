@@ -21,6 +21,7 @@ set.seed(seed)
 # load libraries
 library(mice)
 library(rms)
+source("Z:/Project Predict Hypoparathyroidism/Development/Code/propplot_functie.R")
 ```
 
 # Load data
@@ -86,6 +87,10 @@ mi <- mice::mice(work.data, m = m, seed = seed,
            method=miceHypoPmeth,
            predictorMatrix=miceHypoPpred,
            print=FALSE)
+
+# plots
+propplot(mi)
+mice::densityplot(mi)
 ```
 
 # Berekenen PTH daling, gecorrigeerd calcium en gecorrigeerd calcium daling
@@ -293,29 +298,33 @@ for (model.type in model.types){
   if (model.type=="simple"){
     summary.model <- summary(fitted.model, 
                            dPTH=c(0, 1))[which(summary(fitted.model)[, "Type"]==1),]
-    coef.model <- shrinkage.factor.hypop*summary.model["Effect"]
+    coef.model <- c(fitted.model$coefficients["Intercept"], summary.model["Effect"])
     CI.coef <- summary.model[c("Lower 0.95", "Upper 0.95")]
+    shrunk.coef.model <- shrinkage.factor.hypop*summary.model["Effect"]
   } else{
     summary.model <- summary(fitted.model, 
                            dPTH=c(0, 1),
                            CorrCa24u=c(0.2, 0.1),
                            BSKgezien="Yes")[which(summary(fitted.model)[, "Type"]==1), ]
-    coef.model <- shrinkage.factor.hypop*summary.model[,  "Effect"]
+    coef.model <- c(fitted.model$coefficients["Intercept"], summary.model[,  "Effect"])
     CI.coef <- summary.model[, c("Lower 0.95", "Upper 0.95")]
+    shrunk.coef.model <- shrinkage.factor.hypop*summary.model[,  "Effect"]
   }
   
+  Int.CI.lower <- fitted.model$coefficients["Intercept"]+qnorm(0.025)*sqrt(diag(fitted.model$var)[1]/nrow(work.data))
+  Int.CI.upper <- fitted.model$coefficients["Intercept"]+qnorm(0.975)*sqrt(diag(fitted.model$var)[1]/nrow(work.data))
+  CI.df <- exp(rbind(c(Int.CI.lower, Int.CI.upper), CI.coef))
+  
   # save results
-  assign(paste0(model.type, ".intercept.shrunk"), intercept.shrunk)
   assign(paste0("coef.", model.type, ".model"), coef.model)
+  assign(paste0("OR.", model.type, ".model"), exp(coef.model))
+  assign(paste0("shrunk.intercept.", model.type), intercept.shrunk)
+  assign(paste0("shrunk.coef.", model.type, ".model"), shrunk.coef.model)
+  assign(paste0("shrunk.OR.", model.type, ".model"), exp(c(intercept.shrunk, shrunk.coef.model)))
   
   an <- stats::anova(fitted.model)
   assign(paste0("an.", model.type), an)
   
-  Int.CI.lower <- fitted.model$coefficients["Intercept"]+qnorm(0.025)*sqrt(diag(fitted.model$var)[1]/nrow(work.data))
-  Int.CI.upper <- fitted.model$coefficients["Intercept"]+qnorm(0.975)*sqrt(diag(fitted.model$var)[1]/nrow(work.data))
-  CI.df <- exp(rbind(c(shrinkage.factor.hypop*Int.CI.lower+intercept.extra,
-                       shrinkage.factor.hypop*Int.CI.upper+intercept.extra),
-                     shrinkage.factor.hypop*CI.coef))
   if (model.type!="simple"){
     row.names(CI.df)[1] <- c("Intercept") # give intercept a name
   } else{
@@ -323,9 +332,6 @@ for (model.type in model.types){
     row.names(CI.df) <- c("Intercept", "dPTH")
   }
   assign(paste0("CI.", model.type, ".model"), CI.df)
-  
-  assign(paste0("OR.", model.type, ".model"), 
-         exp(c(intercept.shrunk, coef.model)))
 }
 ```
 
@@ -360,43 +366,6 @@ png(file=paste0(file.path, "Results/model.performance.full.model.png"),
     width=400, height=400, units="px")
 out.full <- PredictionTools::val.prob.mi(lp.mi=lp.full, y=as.numeric(work.data$HypoP)-1, dist=TRUE)
 grDevices::dev.off()
-```
-# Save table
-```{r, eval=TRUE, warning=FALSE}
-names.coef <- c("Intercept", "dPTH", "CorrCa24u", "BSKgezien - No:Yes", 
-                               "Age_Years", "Sex - Male:Female", 
-                               "surgery_type - completion:total", "CHKD - Yes:No")
-OR.table <- data.frame(names=names.coef,
-                                coef.full=sprintf("%.2f", OR.full.model[names.coef]),
-                                CI.full=c(paste0("[", sprintf("%.2f", CI.full.model[names.coef, 1]), "; ", 
-                                               sprintf("%.2f", CI.full.model[names.coef, 2]), "]")),
-                                Chi.full=c("", sprintf("%.1f", an.full[-nrow(an.full), "Chi-Square"])),
-                                coef.final=c(sprintf("%.2f", OR.final.model), rep("", 4)),
-                                CI.final=c(paste0("[", sprintf("%.2f", CI.final.model[, 1]), "; ", 
-                                               sprintf("%.2f", CI.final.model[, 2]), "]"), rep("", 4)),
-                                Chi.final=c("", sprintf("%.1f", an.final[-nrow(an.final), "Chi-Square"]),
-                                            rep("", 4)),
-                                coef.simple=c(sprintf("%.2f", OR.simple.model), rep("", 6)),
-                                CI.simple=c(paste0("[", sprintf("%.2f", CI.simple.model[, 1]), "; ", 
-                                               sprintf("%.2f", CI.simple.model[, 2]), "]"),
-                                            rep("", 6)),
-                                Chi.simple=c("", sprintf("%.1f", an.simple[-nrow(an.simple), "Chi-Square"]),
-                                             rep("", 6)))
-Cindex.table <- c("C-index optimism-corrected",
-                  sprintf("%.2f", out.full$cindex-optimism.C), 
-                  paste0("[", sprintf("%.2f", out.full$cindex.lower-optimism.C), "; ", sprintf("%.2f", out.full$cindex.upper-optimism.C), "]"),
-                  "",
-                  sprintf("%.2f", out.final$cindex-optimism.C), 
-                  paste0("[", sprintf("%.2f", out.final$cindex.lower-optimism.C), "; ", sprintf("%.2f", out.final$cindex.upper-optimism.C), "]"),
-                  "",
-                  sprintf("%.2f", out.simple$cindex-optimism.C), 
-                  paste0("[", sprintf("%.2f", out.simple$cindex.lower-optimism.C), "; ", sprintf("%.2f", out.simple$cindex.upper-optimism.C), "]"),
-                  "")
-final.table <- rbind(OR.table, Cindex.table)
-openxlsx::write.xlsx(final.table,
-            rowNames=FALSE,
-            file=paste0(file.path, "/Results/hypopara.model.xlsx"))
-
 ```
 # Assess leave-one-center-out cross-validation
 ```{r, eval=TRUE, warning=FALSE}
@@ -475,28 +444,13 @@ refitted.full.model <- Hmisc::fit.mult.impute(form.refitted.full.model, lrm,
 summary(refitted.full.model)
 anova(refitted.full.model)
 ```
-# Select model through backward selection for readmission model
-```{r, eval=TRUE}
-form.redeveloped.model <- Readmission ~ dPTH + 
-  CorrCa24u  
-  # BSKgezien + 
-  # Age_Years + 
-  # Sex 
-  # surgery_type
-  # CHKD
-redeveloped.model <- Hmisc::fit.mult.impute(form.redeveloped.model, lrm, 
-                                          xtrans=imputed.data,
-                                          data=work.data,
-                                          n.impute=m, pr=FALSE, fit.reps=TRUE, 
-                                          fitargs=list(y=TRUE, x=TRUE, se.fit=TRUE))
-anova(redeveloped.model)
-```
 # Shrinkage factor for readmission model
 ```{r, eval=TRUE}
 v.readmission <- rms::validate(refitted.full.model, method="boot", bw=TRUE, rule="p", sls=0.05, B=1000,
                    pr=FALSE, type="individual")
 # in each bootstrap BSKgezien is omitted, only dPTH and CorrCa24u remain
 shrinkage.factor.read <- v.readmission["Slope", "test"]
+optimism.C.read<-v.readmission["Dxy","optimism"]/2          # optimism C-index, /2 because  C.orig - C.B the +1 cancels out
 cat("Shrinkage factor     :", shrinkage.factor.read, "\n")
 # similar shrinkage factor
 ```
@@ -511,22 +465,9 @@ refitted.final.model <- Hmisc::fit.mult.impute(form.refitted.final.model, lrm,
                                           n.impute=m, pr=FALSE, fit.reps=TRUE, 
                                           fitargs=list(y=TRUE, x=TRUE, se.fit=TRUE))
 ```
-# Test refitted versus redeveloped model
-```{r, eval=TRUE}
-# final model and refitted model have similar coefficients
-coef(final.model)
-coef(refitted.final.model)
-
-# BSKgezien seems to not be relevant for hypocalcemia-related readmissions
-coef(redeveloped.model)
-AIC(refitted.final.model)
-AIC(redeveloped.model)
-
-# model without BSKgezien is better, but not significantly
-lrtest(refitted.final.model, redeveloped.model)
-```
 # Calibrated readmission model
 ```{r, eval=TRUE}
+cal.int <- c()
 cal.fact <- c()
 cal.fact.SE <- c()
 for (i in 1:m){
@@ -536,6 +477,7 @@ for (i in 1:m){
   f.mi <- rms::lrm(Readmission~lp.i,
                      data=mice::complete(imputed.data, i),
                      y=TRUE, x=TRUE)
+  cal.int <- c(cal.int, stats::coef(f.mi)[1])
   cal.fact <- c(cal.fact, stats::coef(f.mi)[2])
   cal.fact.SE <- c(cal.fact.SE, sqrt(diag(vcov(f.mi)))[2])
 }
@@ -547,42 +489,40 @@ print(paste0(sprintf("%.2f", cal.fact.final), " [",
             sprintf("%.2f", cal.fact.final+qnorm(.025)*cal.fact.combined$se), "; ",
             sprintf("%.2f", cal.fact.final+qnorm(.975)*cal.fact.combined$se), "]"))
 ```
-# Calibratino plots of readmission models
+# Calibration plots of readmission models
 ```{r, eval=TRUE}
 lp.refitted.full <- c()
 lp.refitted.final <- c()
-lp.redeveloped <- c()
+lp.calibrated <- c()
+coef.calibrated.model <- c()
 for (i in 1:m){
+  imputed.data.i <- mice::complete(imputed.data, i)
+  
   lp.refitted.full <- predict(refitted.full.model,
-                  newdata=mice::complete(imputed.data, i), 
+                  newdata=imputed.data.i, 
                   type="lp")
   lp.refitted.final <- predict(refitted.final.model,
-                  newdata=mice::complete(imputed.data, i), 
+                  newdata=imputed.data.i, 
                   type="lp")
-  lp.redeveloped <- predict(redeveloped.model,
-                  newdata=mice::complete(imputed.data, i), 
-                  type="lp")
-  lp.calibrated <- cal.fact.final*predict(final.model,
-                                          newdata=mice::complete(imputed.data, i), 
-                                          type="lp")
+  
+  # lp.calibrated <- cal.fact.final*predict(final.model,
+  #                                         newdata=mice::complete(imputed.data, i),
+  #                                         type="lp") # WRONG
+  predict.df <- as.matrix(cbind(rep(1, nrow(imputed.data.i)), 
+                                imputed.data.i[, c("dPTH", "CorrCa24u")], 
+                                as.numeric(imputed.data.i[, "BSKgezien"])-1))
+  coef.calibrated.model.i <- c(cal.fact[i]*coef(final.model)[1]+cal.int[i], 
+                               cal.fact[i]*coef(final.model)[-1])
+  lp.calibrated <- as.numeric(t(coef.calibrated.model.i) %*% t(predict.df))
+  coef.calibrated.model <- c(coef.calibrated.model, coef.calibrated.model.i)
 }
 
-model.types <- c("refitted.full", "refitted.final", "refitted.final.shrunk", 
-                 "calibrated", "redeveloped", "redeveloped.shrunk")
+model.types <- c("refitted.full", "refitted.final", "calibrated")
 for (model.type in model.types){
-  if (model.type=="refitted.final.shrunk"){
-    shrink.fact.cal.plot <- shrinkage.factor.hypop
-    lp.model <- lp.refitted.final
-  } else if (model.type=="redeveloped.shrunk"){
-    shrink.fact.cal.plot <- shrinkage.factor.read
-    lp.model <- lp.redeveloped
-  } else{
-    shrink.fact.cal.plot <- 1
-    lp.model <- eval(parse(text=paste0("lp.", model.type)))
-  }
+  lp.model <- eval(parse(text=paste0("lp.", model.type)))
   png(file=paste0(file.path, "Results/model.performance.", model.type, ".model.png"), 
     width=400, height=400, units="px")
-  cal.plot <- PredictionTools::val.prob.mi(lp.mi=shrink.fact.cal.plot*lp.model, dist=TRUE, 
+  cal.plot <- PredictionTools::val.prob.mi(lp.mi=lp.model, dist=TRUE, 
                              y=as.numeric(work.data$Readmission)-1)
   dev.off()
   assign(paste0("out.", model.type), cal.plot)
@@ -590,70 +530,83 @@ for (model.type in model.types){
 ```
 # Save results
 ```{r, eval=TRUE}
-model.types <- c("refitted.full", "refitted.final", "redeveloped", "calibrated")
+model.types <- c("refitted.full", "refitted.final")
 for (model.type in model.types){
   lp.model <- eval(parse(text=paste0("lp.", model.type)))
-  if (model.type=="calibrated"){
-    fitted.model <- final.model
-  } else{
-    fitted.model <- eval(parse(text=paste0(model.type, ".model")))
-  }
-  
-  # TODO: shrinkage factor
-  shrinkage.factor.readmission <- 1
-  intercept.extra.readmission <- 0
+  fitted.model <- eval(parse(text=paste0(model.type, ".model")))
   
   # save coefficients
-  if (model.type=="redeveloped"){
-    summary.model <- summary(fitted.model, 
-                           dPTH=c(0, 1),
-                           CorrCa24u=c(0.2, 0.1))[which(summary(fitted.model)[, "Type"]==1),]
-  } else{
-    summary.model <- summary(fitted.model, 
-                           dPTH=c(0, 1),
-                           CorrCa24u=c(0.2, 0.1),
-                           BSKgezien="Yes")[which(summary(fitted.model)[, "Type"]==1), ]
-  }
-  coef.model <- shrinkage.factor.readmission*summary.model[,  "Effect"]
-  CI.coef <- summary.model[, c("Lower 0.95", "Upper 0.95")]
-  if (model.type=="calibrated"){
-    coef.model <- cal.fact.final*coef.model
-    CI.coef <- cal.fact.final*CI.coef
-    
-    Int.CI.lower <- cal.fact.final*(fitted.model$coefficients["Intercept"]+qnorm(0.025)*sqrt(diag(fitted.model$var)[1]/nrow(work.data)))
-    Int.CI.upper <- cal.fact.final*(fitted.model$coefficients["Intercept"]+qnorm(0.975)*sqrt(diag(fitted.model$var)[1]/nrow(work.data)))
-  }
+  summary.model <- summary(fitted.model, 
+                         dPTH=c(0, 1),
+                         CorrCa24u=c(0.2, 0.1),
+                         BSKgezien="Yes")[which(summary(fitted.model)[, "Type"]==1), ]
+  
+  # don't apply shrinkage to refitted coefficients
+  # shrink.fact <- shrinkage.factor.read
+  
+  coef.model <- c(fitted.model$coefficients["Intercept"],
+                  summary.model[,  "Effect"])
   assign(paste0("coef.", model.type, ".model"), coef.model)
+  assign(paste0("OR.", model.type, ".model"), exp(coef.model))
+
+  CI.coef <- summary.model[, c("Lower 0.95", "Upper 0.95")]
+  Int.CI.lower <- fitted.model$coefficients["Intercept"]+qnorm(0.025)*sqrt(diag(fitted.model$var)[1]/nrow(work.data))
+  Int.CI.upper <- fitted.model$coefficients["Intercept"]+qnorm(0.975)*sqrt(diag(fitted.model$var)[1]/nrow(work.data))
+  CI.df <- exp(rbind(c(Int.CI.lower, Int.CI.upper), CI.coef))
+  row.names(CI.df)[1] <- c("Intercept")
+  assign(paste0("CI.", model.type, ".model"), CI.df)
   
   # save variable importance
   an <- stats::anova(fitted.model)
   assign(paste0("an.", model.type), an)
-  
-  # save CI
-  CI.df <- exp(rbind(c(shrinkage.factor.readmission*Int.CI.lower+intercept.extra.readmission,
-                       shrinkage.factor.readmission*Int.CI.upper+intercept.extra.readmission),
-                     shrinkage.factor.readmission*CI.coef))
-  row.names(CI.df)[1] <- c("Intercept") # give intercept a name
-
-  assign(paste0("CI.", model.type, ".model"), CI.df)
-  
-  assign(paste0("OR.", model.type, ".model"), 
-         exp(c(intercept.shrunk, coef.model)))
 }
-  # # new intercept after shrinkage
-  # lp <- predict(fitted.model)
-  # lp.shrunk <- shrinkage.factor.readmission*lp
-  # fit.extra <- lrm.fit(y=work.data$HypoP,
-  #                       offset=lp.shrunk) # TODO: for each imputation?
-  # intercept.extra.readmission <- coef(fit.extra)[1]
-  # intercept.shrunk <- shrinkage.factor.readmission*fitted.model$coefficients["Intercept"]+intercept.extra.readmission
-  # 
-  # # check
-  # mean(work.data$HypoP=="Yes") # event probability
-  # mean(plogis(lp.shrunk+intercept.extra.readmission))  # same
-  # 
-  # # save results
-  # assign(paste0(model.type, ".intercept.shrunk"), intercept.shrunk)
+```
+# Save table
+```{r, eval=TRUE, warning=FALSE}
+names.coef <- c("Intercept", "dPTH", "CorrCa24u", "BSKgezien - No:Yes", 
+                               "Age_Years", "Sex - Male:Female", 
+                               "surgery_type - completion:total", "CHKD - Yes:No")
+calibrated.readmission.OR <- exp(c(cal.fact.final*shrunk.intercept.final+mean(cal.int),
+                                   cal.fact.final*shrunk.coef.final.model))
+OR.table <- data.frame(names=names.coef,
+                                OR.full=sprintf("%.2f", OR.full.model[names.coef]),
+                                CI.full=c(paste0("[", sprintf("%.2f", CI.full.model[names.coef, 1]), "; ", 
+                                               sprintf("%.2f", CI.full.model[names.coef, 2]), "]")),
+                                shrunk.OR.full=sprintf("%.2f", shrunk.OR.full.model[names.coef]),
+                                Chi.full=c("", sprintf("%.1f", an.full[-nrow(an.full), "Chi-Square"])),
+                                OR.final=c(sprintf("%.2f", OR.final.model), rep("", 4)),
+                                CI.final=c(paste0("[", sprintf("%.2f", CI.final.model[, 1]), "; ", 
+                                               sprintf("%.2f", CI.final.model[, 2]), "]"), rep("", 4)),
+                                shrunk.OR.final=c(sprintf("%.2f", shrunk.OR.final.model), rep("", 4)),
+                                Chi.final=c("", sprintf("%.1f", an.final[-nrow(an.final), "Chi-Square"]),
+                                            rep("", 4)),
+                                calibrated.readmission=c(sprintf("%.2f", calibrated.readmission.OR), rep("", 4)),
+                                OR.simple=c(sprintf("%.2f", OR.simple.model), rep("", 6)),
+                                CI.simple=c(paste0("[", sprintf("%.2f", CI.simple.model[, 1]), "; ", 
+                                               sprintf("%.2f", CI.simple.model[, 2]), "]"),
+                                            rep("", 6)),
+                                shrunk.OR.simple=c(sprintf("%.2f", shrunk.OR.simple.model), rep("", 6)),
+                                Chi.simple=c("", sprintf("%.1f", an.simple[-nrow(an.simple), "Chi-Square"]),
+                                             rep("", 6)))
+Cindex.table <- c("C-index optimism-corrected",
+                  sprintf("%.2f", out.full$cindex-optimism.C), 
+                  paste0("[", sprintf("%.2f", out.full$cindex.lower-optimism.C), "; ", sprintf("%.2f", out.full$cindex.upper-optimism.C), "]"),
+                  "",
+                  "",
+                  sprintf("%.2f", out.final$cindex-optimism.C), 
+                  paste0("[", sprintf("%.2f", out.final$cindex.lower-optimism.C), "; ", sprintf("%.2f", out.final$cindex.upper-optimism.C), "]"),
+                  "",
+                  "",
+                  "",
+                  sprintf("%.2f", out.simple$cindex-optimism.C), 
+                  paste0("[", sprintf("%.2f", out.simple$cindex.lower-optimism.C), "; ", sprintf("%.2f", out.simple$cindex.upper-optimism.C), "]"),
+                  "",
+                  "")
+final.table <- rbind(OR.table, Cindex.table)
+openxlsx::write.xlsx(final.table,
+            rowNames=FALSE,
+            file=paste0(file.path, "/Results/hypopara.model.xlsx"))
+
 ```
 # Save table
 ```{r, eval=TRUE, warning=FALSE}
@@ -670,30 +623,17 @@ OR.table <- data.frame(names=names.coef,
                                                sprintf("%.2f", CI.refitted.final.model[, 2]), "]"),
                                             rep("", 4)),
                                 Chi.refitted.final=c("", sprintf("%.1f", an.refitted.final[-nrow(an.refitted.final), "Chi-Square"]),
-                                             rep("", 4)),
-                                coef.calibrated=c(sprintf("%.2f", OR.calibrated.model), rep("", 4)),
-                                CI.calibrated=c(paste0("[", sprintf("%.2f", CI.calibrated.model[, 1]), "; ", 
-                                               sprintf("%.2f", CI.calibrated.model[, 2]), "]"),
-                                            rep("", 4)),
-                                Chi.calibrated=c("", sprintf("%.1f", an.calibrated[-nrow(an.calibrated), "Chi-Square"]),
-                                             rep("", 4)),
-                                coef.redeveloped=c(sprintf("%.2f", OR.redeveloped.model), rep("", 5)),
-                                CI.redeveloped=c(paste0("[", sprintf("%.2f", CI.redeveloped.model[, 1]), "; ", 
-                                               sprintf("%.2f", CI.redeveloped.model[, 2]), "]"), rep("", 5)),
-                                Chi.redeveloped=c("", sprintf("%.1f", an.redeveloped[-nrow(an.redeveloped), "Chi-Square"]),
-                                            rep("", 5)))
+                                             rep("", 4)))
 Cindex.table <- c("C-index",
-                  sprintf("%.2f", out.refitted.full$cindex), 
-                  paste0("[", sprintf("%.2f", out.refitted.full$cindex.lower), "; ", sprintf("%.2f", out.refitted.full$cindex.upper), "]"),
+                  sprintf("%.2f", out.refitted.full$cindex-optimism.C.read), 
+                  paste0("[", sprintf("%.2f", out.refitted.full$cindex.lower-optimism.C.read), "; ", 
+                         sprintf("%.2f", out.refitted.full$cindex.upper-optimism.C.read), "]"),
                   "",
-                  sprintf("%.2f", out.refitted.final$cindex), 
-                  paste0("[", sprintf("%.2f", out.refitted.final$cindex.lower), "; ", sprintf("%.2f", out.refitted.final$cindex.upper), "]"),
-                  "",
-                  sprintf("%.2f", out.calibrated$cindex), 
-                  paste0("[", sprintf("%.2f", out.calibrated$cindex.lower), "; ", sprintf("%.2f", out.calibrated$cindex.upper), "]"),
-                  "",
-                  sprintf("%.2f", out.redeveloped$cindex), 
-                  paste0("[", sprintf("%.2f", out.redeveloped$cindex.lower), "; ", sprintf("%.2f", out.redeveloped$cindex.upper), "]"),
+                  # "", 
+                  sprintf("%.2f", out.refitted.final$cindex-optimism.C.read), 
+                  paste0("[", sprintf("%.2f", out.refitted.final$cindex.lower-optimism.C.read), "; ", 
+                         sprintf("%.2f", out.refitted.final$cindex.upper-optimism.C.read), "]"),
+                  # "", 
                   "")
 final.table <- rbind(OR.table, Cindex.table)
 openxlsx::write.xlsx(final.table,
@@ -703,24 +643,17 @@ openxlsx::write.xlsx(final.table,
 ```
 # Save for webapp
 ```{r, eval=TRUE}
-coef.hypop.model.webapp <- shrinkage.factor.hypop*summary(final.model, 
+coef.hypop.model.webapp <- c(shrunk.intercept.final,
+                             shrinkage.factor.hypop*summary(final.model, 
                                    dPTH=c(1, 2), 
                                    CorrCa24u=c(1, 2), 
                                    BSKgezien="No")[which(summary(final.model)[, "Type"]==1), 
-                                                   c("Effect")]
-coef.readmission.model.webapp <- summary(refitted.final.model, 
-                                   dPTH=c(1, 2), 
-                                   CorrCa24u=c(1, 2), 
-                                   BSKgezien="No")[which(summary(refitted.final.model)[, "Type"]==1), 
-                                                   c("Effect")]
-intercept.readmission <- coef(refitted.final.model)[1]
-var.cov.hypop <- vcov(final.model)
-var.cov.readmission <- vcov(refitted.final.model)
-save(shrinkage.factor.hypop, final.intercept.shrunk, intercept.readmission,
-     coef.hypop.model.webapp, coef.readmission.model.webapp,
-     var.cov.hypop, var.cov.readmission,
-     single.imputation, refitted.final.model, redeveloped.model,
-     imputed.data, work.data, shrinkage.factor.read,
+                                                   c("Effect")])
+coef.readmission.model.webapp <- c(cal.fact.final*shrunk.intercept.final+mean(cal.int),
+                                       cal.fact.final*coef.hypop.model.webapp[-1])
+
+save(coef.hypop.model.webapp,
+     coef.readmission.model.webapp,
      file=paste0(file.path, "/Results/final.model.Rdata"))
 ```
 # dPTH and readmission
@@ -733,7 +666,7 @@ for (i in 1:m){
   dPTH <- cbind(dPTH, selected.imputation$dPTH)
   
   lp <- cbind(lp,
-              final.intercept.shrunk+
+              shrunk.intercept.final+
                   coef.hypop.model.webapp["dPTH"]*selected.imputation$dPTH+
                   coef.hypop.model.webapp["CorrCa24u"]*selected.imputation$CorrCa24u+
                   coef.hypop.model.webapp["BSKgezien - Yes:No"]*ifelse(selected.imputation$BSKgezien == "Yes", 1, 0))
@@ -767,10 +700,11 @@ plot(plogis(shrinkage.factor.hypop*predict(final.model, type="lp")),
      ylab="Probability of Readmission", ylim=c(0, 1),
      main="Both shrunk with hypoP factor")
 abline(0, 1)
+
 plot(plogis(shrinkage.factor.hypop*predict(final.model, type="lp")), 
-     plogis(shrinkage.factor.read*predict(redeveloped.model, type="lp")),
+     plogis(shrinkage.factor.hypop*lp.calibrated),
      xlab="Probability of Hypoparathyroidism", xlim=c(0, 1),
      ylab="Probability of Readmission", ylim=c(0, 1),
-     main="Both shrunk and both redeveloped")
+     main="Both shrunk with hypoP factor")
 abline(0, 1)
 ```
