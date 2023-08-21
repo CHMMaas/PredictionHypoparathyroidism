@@ -493,28 +493,36 @@ print(paste0(sprintf("%.2f", cal.fact.final), " [",
 ```{r, eval=TRUE}
 lp.refitted.full <- c()
 lp.refitted.final <- c()
+lp.refitted.shrunk.final <- c()
 lp.calibrated <- c()
-coef.calibrated.model <- c()
 for (i in 1:m){
   imputed.data.i <- mice::complete(imputed.data, i)
   
-  lp.refitted.full <- predict(refitted.full.model,
-                  newdata=imputed.data.i, 
-                  type="lp")
-  lp.refitted.final <- predict(refitted.final.model,
-                  newdata=imputed.data.i, 
-                  type="lp")
-  
-  # lp.calibrated <- cal.fact.final*predict(final.model,
-  #                                         newdata=mice::complete(imputed.data, i),
-  #                                         type="lp") # WRONG
-  predict.df <- as.matrix(cbind(rep(1, nrow(imputed.data.i)), 
-                                imputed.data.i[, c("dPTH", "CorrCa24u")], 
+  lp.refitted.full <- cbind(lp.refitted.full, predict(refitted.full.model,
+                                              newdata=imputed.data.i, 
+                                              type="lp"))
+  lp.refitted.final.i <- predict(refitted.final.model,
+                                                newdata=imputed.data.i,
+                                                type="lp")
+  lp.refitted.final <- cbind(lp.refitted.final, lp.refitted.final.i)
+
+  predict.df <- as.matrix(cbind(rep(1, nrow(imputed.data.i)),
+                                imputed.data.i[, c("dPTH", "CorrCa24u")],
                                 as.numeric(imputed.data.i[, "BSKgezien"])-1))
-  coef.calibrated.model.i <- c(cal.fact[i]*coef(final.model)[1]+cal.int[i], 
+  
+  lp.shrunk.i <- shrinkage.factor.read*lp.refitted.final.i
+  fit.extra.refitted.i <- lrm.fit(y=imputed.data.i$HypoP,
+                                  offset=lp.shrunk.i) # TODO: for each imputation?
+  intercept.extra.refitted.i <- coef(fit.extra.refitted.i)[1]
+  shrunk.intercept.refitted.final.i <- shrinkage.factor.read*refitted.final.model$coefficients["Intercept"]+intercept.extra.refitted.i
+
+  coef.refitted.final.i <- c(shrinkage.factor.read*coef(refitted.final.model)[1]+shrunk.intercept.refitted.final.i,
+                             shrinkage.factor.read*coef(refitted.final.model)[-1])
+  lp.refitted.shrunk.final <- cbind(lp.refitted.shrunk.final, as.numeric(t(coef.refitted.final.i) %*% t(predict.df)))
+  
+  coef.calibrated.model.i <- c(cal.fact[i]*coef(final.model)[1]+cal.int[i],
                                cal.fact[i]*coef(final.model)[-1])
-  lp.calibrated <- as.numeric(t(coef.calibrated.model.i) %*% t(predict.df))
-  coef.calibrated.model <- c(coef.calibrated.model, coef.calibrated.model.i)
+  lp.calibrated <- cbind(lp.calibrated, as.numeric(t(coef.calibrated.model.i) %*% t(predict.df)))
 }
 
 model.types <- c("refitted.full", "refitted.final", "calibrated")
@@ -629,11 +637,9 @@ Cindex.table <- c("C-index",
                   paste0("[", sprintf("%.2f", out.refitted.full$cindex.lower-optimism.C.read), "; ", 
                          sprintf("%.2f", out.refitted.full$cindex.upper-optimism.C.read), "]"),
                   "",
-                  # "", 
                   sprintf("%.2f", out.refitted.final$cindex-optimism.C.read), 
                   paste0("[", sprintf("%.2f", out.refitted.final$cindex.lower-optimism.C.read), "; ", 
                          sprintf("%.2f", out.refitted.final$cindex.upper-optimism.C.read), "]"),
-                  # "", 
                   "")
 final.table <- rbind(OR.table, Cindex.table)
 openxlsx::write.xlsx(final.table,
@@ -649,8 +655,15 @@ coef.hypop.model.webapp <- c(shrunk.intercept.final,
                                    CorrCa24u=c(1, 2), 
                                    BSKgezien="No")[which(summary(final.model)[, "Type"]==1), 
                                                    c("Effect")])
+
+coef.readmission.model.webapp.not.shrunk <- c(cal.fact.final*final.model$coefficients["Intercept"]+mean(cal.int),
+                                   cal.fact.final*summary(final.model, 
+                                                           dPTH=c(1, 2), 
+                                                           CorrCa24u=c(1, 2), 
+                                                           BSKgezien="No")[which(summary(final.model)[, "Type"]==1), 
+                                                                           c("Effect")])
 coef.readmission.model.webapp <- c(cal.fact.final*shrunk.intercept.final+mean(cal.int),
-                                       cal.fact.final*coef.hypop.model.webapp[-1])
+                                   cal.fact.final*coef.hypop.model.webapp[-1])
 
 save(coef.hypop.model.webapp,
      coef.readmission.model.webapp,
@@ -659,52 +672,53 @@ save(coef.hypop.model.webapp,
 # dPTH and readmission
 ```{r, eval=TRUE}
 dPTH <- c()
-lp <- c()
+lp.hypop <- c()
+lp.read <- c()
+lp.read.not.shrunk <- c()
 for (i in 1:m){
   selected.imputation <- mice::complete(imputed.data, i)
-  
+
   dPTH <- cbind(dPTH, selected.imputation$dPTH)
-  
-  lp <- cbind(lp,
-              shrunk.intercept.final+
+
+  lp.hypop <- cbind(lp.hypop,
+                  coef.hypop.model.webapp["Intercept"]+
                   coef.hypop.model.webapp["dPTH"]*selected.imputation$dPTH+
                   coef.hypop.model.webapp["CorrCa24u"]*selected.imputation$CorrCa24u+
                   coef.hypop.model.webapp["BSKgezien - Yes:No"]*ifelse(selected.imputation$BSKgezien == "Yes", 1, 0))
+  
+  lp.read <- cbind(lp.read,
+                  coef.readmission.model.webapp["Intercept"]+
+                  coef.readmission.model.webapp["dPTH"]*selected.imputation$dPTH+
+                  coef.readmission.model.webapp["CorrCa24u"]*selected.imputation$CorrCa24u+
+                  coef.readmission.model.webapp["BSKgezien - Yes:No"]*ifelse(selected.imputation$BSKgezien == "Yes", 1, 0))
+  
+  lp.read.not.shrunk <- cbind(lp.read.not.shrunk,
+                  coef.readmission.model.webapp.not.shrunk["Intercept"]+
+                  coef.readmission.model.webapp.not.shrunk["dPTH"]*selected.imputation$dPTH+
+                  coef.readmission.model.webapp.not.shrunk["CorrCa24u"]*selected.imputation$CorrCa24u+
+                  coef.readmission.model.webapp.not.shrunk["BSKgezien - Yes:No"]*ifelse(selected.imputation$BSKgezien == "Yes", 1, 0))
 }
 
-# if the majority of imputations gave high dPTH, consider this patient high dPTH
-table(work.data$HypoP, rowMeans(dPTH)>=70)
-table(work.data$Readmission, rowMeans(dPTH)>=70)
+# Supplemental Table 4
+table(rowMeans(dPTH)>=70)
+paste0(as.numeric(table(work.data$HypoP, rowMeans(dPTH)>=70)[2, ]), " (",
+      round(table(work.data$HypoP, rowMeans(dPTH)>=70)[2, ]/table(rowMeans(dPTH)>=70)*100, 1), "%)")
+paste0(as.numeric(table(work.data$Readmission, rowMeans(dPTH)>=70)[2, ]), " (",
+      round(table(work.data$Readmission, rowMeans(dPTH)>=70)[2, ]/table(rowMeans(dPTH)>=70)*100, 1), "%)")
 
-# average predicted probability of all imputations
-pred <- rowMeans(exp(lp)/(1+exp(lp)))
-
-# predictions stratified
-str.pred <- ifelse(pred<0.1, 1, ifelse(pred>0.3, 3, 2))
-table(str.pred)
-round(table(str.pred)/nrow(work.data)*100, 1)
-
-# hypoP table
-table(work.data$HypoP, str.pred)
-round(table(work.data$HypoP, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)
-
-# readmission table
-table(work.data$Readmission, str.pred)
-round(table(work.data$Readmission, str.pred)/rbind(table(str.pred), table(str.pred))*100, 1)
+# Table 3 - predictions of hypoparathyroidism and readmissions
+pred.hypop <- rowMeans(exp(lp.hypop)/(1+exp(lp.hypop)))
+strat.pred.hypop <- ifelse(pred.hypop<0.1, 1, ifelse(pred.hypop>0.3, 3, 2))
+table(strat.pred.hypop)
+paste0(as.numeric(table(work.data$HypoP, strat.pred.hypop)[2, ]), " (",
+       round(table(work.data$HypoP, strat.pred.hypop)/rbind(table(strat.pred.hypop), table(strat.pred.hypop))*100, 1)[2, ], "%)")
+paste0(as.numeric(table(work.data$Readmission, strat.pred.hypop)[2, ]), " (",
+       round(table(work.data$Readmission, strat.pred.hypop)/rbind(table(strat.pred.hypop), table(strat.pred.hypop))*100, 1)[2, ], "%)")
 ```
-# Compare predictions for HypoP and Readmission model
 ```{r, eval=TRUE}
-plot(plogis(shrinkage.factor.hypop*predict(final.model, type="lp")), 
-     plogis(shrinkage.factor.hypop*predict(refitted.final.model, type="lp")),
-     xlab="Probability of Hypoparathyroidism", xlim=c(0, 1),
-     ylab="Probability of Readmission", ylim=c(0, 1),
-     main="Both shrunk with hypoP factor")
-abline(0, 1)
-
-plot(plogis(shrinkage.factor.hypop*predict(final.model, type="lp")), 
-     plogis(shrinkage.factor.hypop*lp.calibrated),
-     xlab="Probability of Hypoparathyroidism", xlim=c(0, 1),
-     ylab="Probability of Readmission", ylim=c(0, 1),
-     main="Both shrunk with hypoP factor")
-abline(0, 1)
+PredictionTools::val.prob.mi(lp.mi=lp.hypop, y=as.numeric(work.data$HypoP)-1, dist=TRUE)                       # includes shrinakge
+PredictionTools::val.prob.mi(lp.mi=lp.read, y=as.numeric(work.data$Readmission)-1, dist=TRUE)                  # includes shrinkage and calibration
+PredictionTools::val.prob.mi(lp.mi=lp.read.not.shrunk, y=as.numeric(work.data$Readmission)-1, dist=TRUE)       # includes only calibration, no shrinkage
+PredictionTools::val.prob.mi(lp.mi=lp.refitted.final, y=as.numeric(work.data$Readmission)-1, dist=TRUE)        # no shrinkage
+PredictionTools::val.prob.mi(lp.mi=lp.refitted.shrunk.final, y=as.numeric(work.data$Readmission)-1, dist=TRUE) # includes shrinkage
 ```
