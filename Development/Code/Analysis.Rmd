@@ -21,6 +21,8 @@ set.seed(seed)
 # load libraries
 library(mice)
 library(rms)
+# remotes::install_github("CHMMaas/PredictionTools")
+library(PredictionTools)
 source("Z:/Project Predict Hypoparathyroidism/Development/Code/propplot_functie.R")
 ```
 
@@ -283,16 +285,22 @@ model.types <- c("full", "final", "simple")
 for (model.type in model.types){
   # new intercept after shrinkage
   fitted.model <- eval(parse(text=paste0(model.type, ".model")))
-  lp <- predict(fitted.model)
-  lp.shrunk <- shrinkage.factor.hypop*lp
-  fit.extra <- lrm.fit(y=work.data$HypoP,
-                        offset=lp.shrunk) # TODO: for each imputation?
-  intercept.extra <- coef(fit.extra)[1]
+  intercepts.extra <- c()
+  lp.shrunk <- c()
+  for (i in 1:m){
+    lp.i <- predict(fitted.model, newdata=mice::complete(imputed.data, i))
+    lp.shrunk.i <- shrinkage.factor.hypop*lp.i
+    lp.shrunk <- cbind(lp.shrunk, lp.shrunk.i)
+    fit.extra.i <- lrm.fit(y=work.data$HypoP,
+                          offset=lp.shrunk.i)
+    intercepts.extra <- c(intercepts.extra, coef(fit.extra.i)[1])
+  }
+  intercept.extra <- mean(intercepts.extra)
   intercept.shrunk <- shrinkage.factor.hypop*fitted.model$coefficients["Intercept"]+intercept.extra
   
   # check
   mean(work.data$HypoP=="Yes") # event probability
-  mean(plogis(lp.shrunk+intercept.extra))  # same
+  mean(plogis(rowMeans(lp.shrunk)+intercept.extra))  # same
   
   # save results
   if (model.type=="simple"){
@@ -337,42 +345,33 @@ for (model.type in model.types){
 
 # Assess performance
 ```{r, eval=TRUE, warning=FALSE}
-# make predictions for each imputation
-lp.simple <- c()
-lp.final <- c()
-lp.full <- c()
-for (i in 1:m){
-  lp.simple <- cbind(lp.simple, predict(simple.model, newdata=mice::complete(imputed.data, i))) # TODO: apply shrinkage factor?
-  lp.final <- cbind(lp.final, predict(final.model, newdata=mice::complete(imputed.data, i)))
-  lp.full <- cbind(lp.full, predict(full.model, newdata=mice::complete(imputed.data, i)))
+model.types <- c("full", "final", "simple")
+for (model.type in model.types){
+  # make predictions for each imputation
+  lp.model <- c()
+  fitted.model <- eval(parse(text=paste0(model.type, ".model")))
+  for (i in 1:m){
+    lp.model <- cbind(lp.model, predict(fitted.model, 
+                                        newdata=mice::complete(imputed.data, i)))
+  }
+  assign(paste0("lp.", model.type), lp.model)
+  
+  # make plot
+  png(file=paste0(file.path, "Results/model.performance.", model.type, ".model.png"), 
+      width=400, height=400, units="px")
+  out.model <- PredictionTools::val.prob.mi(lp.mi=lp.model, y=as.numeric(work.data$HypoP)-1, g=3, dist=TRUE)
+  grDevices::dev.off()
+  assign(paste0("out.", model.type), out.model)
 }
-
-# simple model
-png(file=paste0(file.path, "Results/model.performance.simple.model.png"), 
-    width=400, height=400, units="px")
-out.simple <- PredictionTools::val.prob.mi(lp.mi=lp.simple, y=as.numeric(work.data$HypoP)-1, dist=TRUE)
-grDevices::dev.off()
 lrtest(simple.model, final.model)
-
-# final model
-png(file=paste0(file.path, "Results/model.performance.final.model.png"), 
-    width=400, height=400, units="px")
-out.final <- PredictionTools::val.prob.mi(lp.mi=lp.final, y=as.numeric(work.data$HypoP)-1, dist=TRUE)
-grDevices::dev.off()
 lrtest(final.model, full.model)
-
-# full model
-png(file=paste0(file.path, "Results/model.performance.full.model.png"), 
-    width=400, height=400, units="px")
-out.full <- PredictionTools::val.prob.mi(lp.mi=lp.full, y=as.numeric(work.data$HypoP)-1, dist=TRUE)
-grDevices::dev.off()
 ```
 # Assess leave-one-center-out cross-validation
 ```{r, eval=TRUE, warning=FALSE}
 # 4 splits
 table(work.data$Validatie1)
 Centers <- levels(work.data$Validatie1)
-Centers.title <- paste("Cohort", 1:4)
+Centers.title <- paste(c("A.", "B.", "C.", "D."), "Cohort", 1:4)
 for (type in c("full", "final")){
   for (j in 1:4){
     # split outcomes for center j and not j
@@ -391,14 +390,6 @@ for (type in c("full", "final")){
                                           fitargs=list(y=TRUE, x=TRUE, se.fit=TRUE),
                                           sub=work.data$Validatie1!=Centers[j])
     
-    # TODO: calculate shrinkage?
-    # v<-rms::validate(model.notj,method="boot",bw=TRUE,rule="p",sls=0.05,B=100,pr=FALSE,type="individual")
-    # shrinkage.factor.hypop.notj <- v["Slope","test"]
-    
-    # cat("Now calculating for center", Centers[j], "\n")
-    # print(model.notj$coefficients)
-    # print(shrinkage.factor.hypop.notj)
-    
     # make prediction for 1 center
     lp.j <- c()
     for (i in 1:m){
@@ -408,7 +399,8 @@ for (type in c("full", "final")){
 
     # make plot
     png(file=paste0(file.path, "Results/Figures/model.performance.", type, ".", Centers[j], ".png"))
-    out.j <- PredictionTools::val.prob.mi(lp.mi=lp.j, y=y.j, main=Centers.title[j], g=3, dist=TRUE)
+    out.j <- PredictionTools::val.prob.mi(lp.mi=lp.j, y=y.j, main=Centers.title[j], 
+                                          g=3, dist=TRUE, smoothed.curve=FALSE)
     grDevices::dev.off()
   }
 }
@@ -444,16 +436,6 @@ refitted.full.model <- Hmisc::fit.mult.impute(form.refitted.full.model, lrm,
 summary(refitted.full.model)
 anova(refitted.full.model)
 ```
-# Shrinkage factor for readmission model
-```{r, eval=TRUE}
-v.readmission <- rms::validate(refitted.full.model, method="boot", bw=TRUE, rule="p", sls=0.05, B=1000,
-                   pr=FALSE, type="individual")
-# in each bootstrap BSKgezien is omitted, only dPTH and CorrCa24u remain
-shrinkage.factor.read <- v.readmission["Slope", "test"]
-optimism.C.read<-v.readmission["Dxy","optimism"]/2          # optimism C-index, /2 because  C.orig - C.B the +1 cancels out
-cat("Shrinkage factor     :", shrinkage.factor.read, "\n")
-# similar shrinkage factor
-```
 # Refitted readmission model
 ```{r, eval=TRUE}
 form.refitted.final.model <- Readmission ~ dPTH + 
@@ -470,30 +452,39 @@ refitted.final.model <- Hmisc::fit.mult.impute(form.refitted.final.model, lrm,
 cal.int <- c()
 cal.fact <- c()
 cal.fact.SE <- c()
+gammas.extra <- c()
 for (i in 1:m){
+  # calculate calibration factor
   lp.i <- predict(final.model,
                   newdata=mice::complete(imputed.data, i), 
                   type="lp")
   f.mi <- rms::lrm(Readmission~lp.i,
-                     data=mice::complete(imputed.data, i),
-                     y=TRUE, x=TRUE)
+                   data=mice::complete(imputed.data, i),
+                   y=TRUE, x=TRUE)
   cal.int <- c(cal.int, stats::coef(f.mi)[1])
   cal.fact <- c(cal.fact, stats::coef(f.mi)[2])
   cal.fact.SE <- c(cal.fact.SE, sqrt(diag(vcov(f.mi)))[2])
+  
+  # calculate correction for calibrated shrunk model
+  lp.shrunk.i <- shrinkage.factor.hypop*lp.i
+  fit.extra.i <- lrm.fit(y=work.data$Readmission,
+                        offset=lp.shrunk.i)
+  gammas.extra <- c(gammas.extra, coef(fit.extra.i)[1])
 }
-cal.fact.combined <- PredictionTools::Rubin.combine(cal.fact, cal.fact.SE)
+# factor added to intercept for calibrated shrunk coefficients
+gamma.extra <- mean(gammas.extra)
 
 # calibration factor is not significant from zero
-cal.fact.final <- cal.fact.combined$est
-print(paste0(sprintf("%.2f", cal.fact.final), " [",
-            sprintf("%.2f", cal.fact.final+qnorm(.025)*cal.fact.combined$se), "; ",
-            sprintf("%.2f", cal.fact.final+qnorm(.975)*cal.fact.combined$se), "]"))
+cal.fact.combined <- PredictionTools::Rubin.combine(cal.fact, cal.fact.SE)
+gamma <- cal.fact.combined$est
+print(paste0(sprintf("%.2f", gamma), " [",
+            sprintf("%.2f", gamma+qnorm(.025)*cal.fact.combined$se), "; ",
+            sprintf("%.2f", gamma+qnorm(.975)*cal.fact.combined$se), "]"))
 ```
 # Calibration plots of readmission models
 ```{r, eval=TRUE}
 lp.refitted.full <- c()
 lp.refitted.final <- c()
-lp.refitted.shrunk.final <- c()
 lp.calibrated <- c()
 for (i in 1:m){
   imputed.data.i <- mice::complete(imputed.data, i)
@@ -501,24 +492,13 @@ for (i in 1:m){
   lp.refitted.full <- cbind(lp.refitted.full, predict(refitted.full.model,
                                               newdata=imputed.data.i, 
                                               type="lp"))
-  lp.refitted.final.i <- predict(refitted.final.model,
+  lp.refitted.final <- cbind(lp.refitted.final, predict(refitted.final.model,
                                                 newdata=imputed.data.i,
-                                                type="lp")
-  lp.refitted.final <- cbind(lp.refitted.final, lp.refitted.final.i)
+                                                type="lp"))
 
   predict.df <- as.matrix(cbind(rep(1, nrow(imputed.data.i)),
                                 imputed.data.i[, c("dPTH", "CorrCa24u")],
                                 as.numeric(imputed.data.i[, "BSKgezien"])-1))
-  
-  lp.shrunk.i <- shrinkage.factor.read*lp.refitted.final.i
-  fit.extra.refitted.i <- lrm.fit(y=imputed.data.i$HypoP,
-                                  offset=lp.shrunk.i) # TODO: for each imputation?
-  intercept.extra.refitted.i <- coef(fit.extra.refitted.i)[1]
-  shrunk.intercept.refitted.final.i <- shrinkage.factor.read*refitted.final.model$coefficients["Intercept"]+intercept.extra.refitted.i
-
-  coef.refitted.final.i <- c(shrinkage.factor.read*coef(refitted.final.model)[1]+shrunk.intercept.refitted.final.i,
-                             shrinkage.factor.read*coef(refitted.final.model)[-1])
-  lp.refitted.shrunk.final <- cbind(lp.refitted.shrunk.final, as.numeric(t(coef.refitted.final.i) %*% t(predict.df)))
   
   coef.calibrated.model.i <- c(cal.fact[i]*coef(final.model)[1]+cal.int[i],
                                cal.fact[i]*coef(final.model)[-1])
@@ -530,13 +510,13 @@ for (model.type in model.types){
   lp.model <- eval(parse(text=paste0("lp.", model.type)))
   png(file=paste0(file.path, "Results/model.performance.", model.type, ".model.png"), 
     width=400, height=400, units="px")
-  cal.plot <- PredictionTools::val.prob.mi(lp.mi=lp.model, dist=TRUE, 
+  cal.plot <- PredictionTools::val.prob.mi(lp.mi=lp.model, g=3, dist=TRUE, 
                              y=as.numeric(work.data$Readmission)-1)
   dev.off()
   assign(paste0("out.", model.type), cal.plot)
 }
 ```
-# Save results
+# Save results for Table
 ```{r, eval=TRUE}
 model.types <- c("refitted.full", "refitted.final")
 for (model.type in model.types){
@@ -548,9 +528,6 @@ for (model.type in model.types){
                          dPTH=c(0, 1),
                          CorrCa24u=c(0.2, 0.1),
                          BSKgezien="Yes")[which(summary(fitted.model)[, "Type"]==1), ]
-  
-  # don't apply shrinkage to refitted coefficients
-  # shrink.fact <- shrinkage.factor.read
   
   coef.model <- c(fitted.model$coefficients["Intercept"],
                   summary.model[,  "Effect"])
@@ -569,13 +546,14 @@ for (model.type in model.types){
   assign(paste0("an.", model.type), an)
 }
 ```
-# Save table
+# Save Table
 ```{r, eval=TRUE, warning=FALSE}
 names.coef <- c("Intercept", "dPTH", "CorrCa24u", "BSKgezien - No:Yes", 
                                "Age_Years", "Sex - Male:Female", 
                                "surgery_type - completion:total", "CHKD - Yes:No")
-calibrated.readmission.OR <- exp(c(cal.fact.final*shrunk.intercept.final+mean(cal.int),
-                                   cal.fact.final*shrunk.coef.final.model))
+calibrated.readmission.coef <- c(gamma*shrunk.intercept.final+gamma.extra,
+                                   gamma*shrunk.coef.final.model)
+calibrated.readmission.OR <- exp(calibrated.readmission.coef)
 OR.table <- data.frame(names=names.coef,
                                 OR.full=sprintf("%.2f", OR.full.model[names.coef]),
                                 CI.full=c(paste0("[", sprintf("%.2f", CI.full.model[names.coef, 1]), "; ", 
@@ -616,7 +594,7 @@ openxlsx::write.xlsx(final.table,
             file=paste0(file.path, "/Results/hypopara.model.xlsx"))
 
 ```
-# Save table
+# Save able
 ```{r, eval=TRUE, warning=FALSE}
 names.coef <- c("Intercept", "dPTH", "CorrCa24u", "BSKgezien - No:Yes", 
                                "Age_Years", "Sex - Male:Female", 
@@ -633,13 +611,13 @@ OR.table <- data.frame(names=names.coef,
                                 Chi.refitted.final=c("", sprintf("%.1f", an.refitted.final[-nrow(an.refitted.final), "Chi-Square"]),
                                              rep("", 4)))
 Cindex.table <- c("C-index",
-                  sprintf("%.2f", out.refitted.full$cindex-optimism.C.read), 
-                  paste0("[", sprintf("%.2f", out.refitted.full$cindex.lower-optimism.C.read), "; ", 
-                         sprintf("%.2f", out.refitted.full$cindex.upper-optimism.C.read), "]"),
+                  sprintf("%.2f", out.refitted.full$cindex), 
+                  paste0("[", sprintf("%.2f", out.refitted.full$cindex.lower), "; ", 
+                         sprintf("%.2f", out.refitted.full$cindex.upper), "]"),
                   "",
-                  sprintf("%.2f", out.refitted.final$cindex-optimism.C.read), 
-                  paste0("[", sprintf("%.2f", out.refitted.final$cindex.lower-optimism.C.read), "; ", 
-                         sprintf("%.2f", out.refitted.final$cindex.upper-optimism.C.read), "]"),
+                  sprintf("%.2f", out.refitted.final$cindex), 
+                  paste0("[", sprintf("%.2f", out.refitted.final$cindex.lower), "; ", 
+                         sprintf("%.2f", out.refitted.final$cindex.upper), "]"),
                   "")
 final.table <- rbind(OR.table, Cindex.table)
 openxlsx::write.xlsx(final.table,
@@ -655,15 +633,8 @@ coef.hypop.model.webapp <- c(shrunk.intercept.final,
                                    CorrCa24u=c(1, 2), 
                                    BSKgezien="No")[which(summary(final.model)[, "Type"]==1), 
                                                    c("Effect")])
-
-coef.readmission.model.webapp.not.shrunk <- c(cal.fact.final*final.model$coefficients["Intercept"]+mean(cal.int),
-                                   cal.fact.final*summary(final.model, 
-                                                           dPTH=c(1, 2), 
-                                                           CorrCa24u=c(1, 2), 
-                                                           BSKgezien="No")[which(summary(final.model)[, "Type"]==1), 
-                                                                           c("Effect")])
-coef.readmission.model.webapp <- c(cal.fact.final*shrunk.intercept.final+mean(cal.int),
-                                   cal.fact.final*coef.hypop.model.webapp[-1])
+coef.readmission.model.webapp <- c(gamma*shrunk.intercept.final+mean(gamma.extra),
+                                   gamma*coef.hypop.model.webapp[-1])
 
 save(coef.hypop.model.webapp,
      coef.readmission.model.webapp,
@@ -674,7 +645,6 @@ save(coef.hypop.model.webapp,
 dPTH <- c()
 lp.hypop <- c()
 lp.read <- c()
-lp.read.not.shrunk <- c()
 for (i in 1:m){
   selected.imputation <- mice::complete(imputed.data, i)
 
@@ -691,12 +661,6 @@ for (i in 1:m){
                   coef.readmission.model.webapp["dPTH"]*selected.imputation$dPTH+
                   coef.readmission.model.webapp["CorrCa24u"]*selected.imputation$CorrCa24u+
                   coef.readmission.model.webapp["BSKgezien - Yes:No"]*ifelse(selected.imputation$BSKgezien == "Yes", 1, 0))
-  
-  lp.read.not.shrunk <- cbind(lp.read.not.shrunk,
-                  coef.readmission.model.webapp.not.shrunk["Intercept"]+
-                  coef.readmission.model.webapp.not.shrunk["dPTH"]*selected.imputation$dPTH+
-                  coef.readmission.model.webapp.not.shrunk["CorrCa24u"]*selected.imputation$CorrCa24u+
-                  coef.readmission.model.webapp.not.shrunk["BSKgezien - Yes:No"]*ifelse(selected.imputation$BSKgezien == "Yes", 1, 0))
 }
 
 # Supplemental Table 4
@@ -716,9 +680,6 @@ paste0(as.numeric(table(work.data$Readmission, strat.pred.hypop)[2, ]), " (",
        round(table(work.data$Readmission, strat.pred.hypop)/rbind(table(strat.pred.hypop), table(strat.pred.hypop))*100, 1)[2, ], "%)")
 ```
 ```{r, eval=TRUE}
-PredictionTools::val.prob.mi(lp.mi=lp.hypop, y=as.numeric(work.data$HypoP)-1, dist=TRUE)                       # includes shrinakge
-PredictionTools::val.prob.mi(lp.mi=lp.read, y=as.numeric(work.data$Readmission)-1, dist=TRUE)                  # includes shrinkage and calibration
-PredictionTools::val.prob.mi(lp.mi=lp.read.not.shrunk, y=as.numeric(work.data$Readmission)-1, dist=TRUE)       # includes only calibration, no shrinkage
-PredictionTools::val.prob.mi(lp.mi=lp.refitted.final, y=as.numeric(work.data$Readmission)-1, dist=TRUE)        # no shrinkage
-PredictionTools::val.prob.mi(lp.mi=lp.refitted.shrunk.final, y=as.numeric(work.data$Readmission)-1, dist=TRUE) # includes shrinkage
+PredictionTools::val.prob.mi(lp.mi=lp.hypop, y=as.numeric(work.data$HypoP)-1, dist=TRUE)
+PredictionTools::val.prob.mi(lp.mi=lp.read, y=as.numeric(work.data$Readmission)-1, dist=TRUE)
 ```
