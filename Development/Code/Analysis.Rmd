@@ -292,7 +292,7 @@ for (model.type in model.types){
     lp.shrunk.i <- shrinkage.factor.hypop*lp.i
     lp.shrunk <- cbind(lp.shrunk, lp.shrunk.i)
     fit.extra.i <- lrm.fit(y=work.data$HypoP,
-                          offset=lp.shrunk.i)
+                           offset=lp.shrunk.i)
     intercepts.extra <- c(intercepts.extra, coef(fit.extra.i)[1])
   }
   intercept.extra <- mean(intercepts.extra)

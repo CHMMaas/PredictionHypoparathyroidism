@@ -749,7 +749,7 @@ for (model.type in model.types){
     lp.shrunk.i &lt;- shrinkage.factor.hypop*lp.i
     lp.shrunk &lt;- cbind(lp.shrunk, lp.shrunk.i)
     fit.extra.i &lt;- lrm.fit(y=work.data$HypoP,
-                          offset=lp.shrunk.i)
+                           offset=lp.shrunk.i)
     intercepts.extra &lt;- c(intercepts.extra, coef(fit.extra.i)[1])
   }
   intercept.extra &lt;- mean(intercepts.extra)
