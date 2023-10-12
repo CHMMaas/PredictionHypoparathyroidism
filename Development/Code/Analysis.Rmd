@@ -126,9 +126,9 @@ options(digits=8)
 ```{r, eval=TRUE, warning=FALSE}
 # linear
 form.full.model <- HypoP ~ dPTH + 
-  CorrCa24u + 
-  # dCorrCa +
   BSKgezien + 
+  CorrCa24u + 
+  dCorrCa +
   Age_Years + 
   Sex +
   surgery_type +
@@ -165,8 +165,8 @@ cat(" Original C          :", cindex.orig, "\n",
 # Backward selection
 ```{r, eval=TRUE, warning=FALSE}
 form.final.model <- HypoP ~ dPTH + 
-  CorrCa24u + 
-  BSKgezien 
+  BSKgezien +
+  CorrCa24u
 
 # multiple imputation model
 final.model <- Hmisc::fit.mult.impute(form.final.model, lrm, 
@@ -199,10 +199,19 @@ for (model.type in model.types){
   mean(plogis(rowMeans(lp.shrunk)+intercept.extra))  # same
   
   # save results
-  summary.model <- summary(fitted.model, 
+  if (model.type=="full"){
+    summary.model <- summary(fitted.model, 
+                         dPTH=c(0, 1),
+                         CorrCa24u=c(0.2, 0.1),
+                         dCorrCa=c(2, 1),
+                         BSKgezien="Yes")[which(summary(fitted.model)[, "Type"]==1), ]
+  } else{
+    summary.model <- summary(fitted.model, 
                          dPTH=c(0, 1),
                          CorrCa24u=c(0.2, 0.1),
                          BSKgezien="Yes")[which(summary(fitted.model)[, "Type"]==1), ]
+  }
+  
   coef.model <- c(fitted.model$coefficients["Intercept"], summary.model[,  "Effect"])
   CI.coef <- summary.model[, c("Lower 0.95", "Upper 0.95")]
   shrunk.coef.model <- shrinkage.factor.hypop*summary.model[,  "Effect"]
@@ -240,7 +249,7 @@ for (model.type in c("full", "final")){
   assign(paste0("lp.", model.type), lp.model)
   
   # make plot
-  png(file=paste0(file.path, "Results/model.performance.", model.type, ".model.png"), 
+  png(file=paste0(file.path, "Results/Figures/model.performance.", model.type, ".model.png"), 
       width=400, height=400, units="px")
   out.model <- PredictionTools::val.prob.mi(lp.mi=lp.model,
                                y=as.numeric(work.data$HypoP)-1, 
@@ -260,9 +269,10 @@ Centers.title <- paste(c("A.", "B.", "C.", "D."), "Cohort", 1:4)
 for (type in c("full", "final")){
   for (j in 1:4){
     # split outcomes for center j and not j
-    y.hypop.j <- as.numeric(work.data$HypoP[work.data$Validatie1==Centers[j]])-1
-    y.read.j <- as.numeric(work.data$Readmission[work.data$Validatie1==Centers[j]])-1
-    y.hypop.notj <- as.numeric(work.data$HypoP[work.data$Validatie1!=Centers[j]])-1
+    y.hypop.j <- as.numeric(work.data$HypoP[work.data$Validatie1==Centers[j]])-1         # test
+    y.read.j <- as.numeric(work.data$Readmission[work.data$Validatie1==Centers[j]])-1    # test
+    y.hypop.notj <- as.numeric(work.data$HypoP[work.data$Validatie1!=Centers[j]])-1      # train
+    y.read.notj <- as.numeric(work.data$Readmission[work.data$Validatie1!=Centers[j]])-1 # train
     
     # model form for center j and not j
     form.model <- eval(parse(text=paste0("form.", type, ".model")))
@@ -286,40 +296,42 @@ for (type in c("full", "final")){
       
       # calibrate model for readmission
       lp.notj <- predict(model.notj, newdata=data.i[work.data$Validatie1!=Centers[j],])
-      f.notj <- rms::lrm(Readmission~lp.notj,
-                       data=data.i[work.data$Validatie1!=Centers[j],],
-                       y=TRUE, x=TRUE)
+      f.notj <- rms::lrm(y.read.notj ~ lp.notj,
+                         data=data.i[work.data$Validatie1!=Centers[j],],
+                         y=TRUE, x=TRUE)
       cal.int.i <- stats::coef(f.notj)[1]
       cal.fact.i <- stats::coef(f.notj)[2]
       
       # linear predictor for calibrated model
       coef.calibrated.model.i <- c(cal.fact.i*coef(final.model)[1]+cal.int.i,
                                    cal.fact.i*coef(final.model)[-1])
-      predict.df <- as.matrix(cbind(rep(1, nrow(data.i[work.data$Validatie1==Centers[j],])),
-                                data.i[work.data$Validatie1==Centers[j], c("dPTH", "CorrCa24u")],
-                                as.numeric(data.i[work.data$Validatie1==Centers[j], "BSKgezien"])-1))
+      predict.df <- as.matrix(cbind(rep(1, nrow(data.i[work.data$Validatie1==Centers[j],])), # Intercept 
+                                data.i[work.data$Validatie1==Centers[j], "dPTH"],            # dPTH
+                                as.numeric(data.i[work.data$Validatie1==Centers[j], "BSKgezien"])-1, # BSKgezien
+                                data.i[work.data$Validatie1==Centers[j], "CorrCa24u"]))   # CorrCa24u
       lp.cal.read.i <- cbind(lp.cal.read.i, as.numeric(t(coef.calibrated.model.i) %*% t(predict.df)))
     }
     
     # make plot hypoparathyroidism
     png(file=paste0(file.path, "Results/Figures/model.performance.hypop.", type, ".", Centers[j], ".png"))
     PredictionTools::val.prob.mi(lp.mi=lp.hypop.i, y=y.hypop.j, main=Centers.title[j], 
-                                          g=3, dist=TRUE, smoothed.curve=FALSE, lim=c(0, 1),
-                                          show.metrics=c(TRUE, TRUE, rep(FALSE, 3), TRUE, rep(FALSE, 3)))
+                                  g=3, dist=TRUE, smoothed.curve=FALSE, lim=c(0, 1),
+                                  show.metrics=c(TRUE, TRUE, rep(FALSE, 3), TRUE, rep(FALSE, 3)))
     grDevices::dev.off()
     
     # make plot readmission
     png(file=paste0(file.path, "Results/Figures/model.performance.readmission.", type, ".", Centers[j], ".png"))
     PredictionTools::val.prob.mi(lp.mi=lp.cal.read.i, y=y.read.j, main=Centers.title[j], 
-                                          g=3, dist=TRUE, smoothed.curve=FALSE, lim=c(0, 1),
-                                          show.metrics=c(TRUE, TRUE, rep(FALSE, 3), TRUE, rep(FALSE, 3)))
+                                  g=3, dist=TRUE, smoothed.curve=FALSE, lim=c(0, 1),
+                                  show.metrics=c(TRUE, TRUE, rep(FALSE, 3), TRUE, rep(FALSE, 3)))
     grDevices::dev.off()
   }
 }
 
 # combine 4 calibration plots into one
 for (type in c("full", "final")){
-  png(file=paste0(file.path, "Results/leave.one.out.cross.validation.hypop.", type, ".png"), width=16, height=16, units="cm", res=300)
+  png(file=paste0(file.path, "Results/", ifelse(type=="full", "Figures/", ""),
+                  "leave.one.out.cross.validation.hypop.", type, ".png"), width=16, height=16, units="cm", res=300)
   par(mar=rep(0, 4))
   layout(matrix(1:4, ncol=2, byrow=TRUE))
   Centers.val <- rep(1:4, 3)
@@ -330,7 +342,8 @@ for (type in c("full", "final")){
   }
   grDevices::dev.off()
   
-  png(file=paste0(file.path, "Results/leave.one.out.cross.validation.readmission.", type, ".png"), width=16, height=16, units="cm", res=300)
+  png(file=paste0(file.path, "Results/", ifelse(type=="full", "Figures/", ""),
+                  "leave.one.out.cross.validation.readmission.", type, ".png"), width=16, height=16, units="cm", res=300)
   par(mar=rep(0, 4))
   layout(matrix(1:4, ncol=2, byrow=TRUE))
   Centers.val <- rep(1:4, 3)
@@ -372,7 +385,7 @@ gamma.extra <- mean(gammas.extra)
 # calibration factor is not significant from zero
 cal.fact.combined <- PredictionTools::Rubin.combine(cal.fact, cal.fact.SE)
 gamma <- cal.fact.combined$est
-print(paste0(sprintf("%.2f", gamma), " [",
+cat("Calibration factor:", paste0(sprintf("%.2f", gamma), " [",
             sprintf("%.2f", gamma+qnorm(.025)*cal.fact.combined$se), "; ",
             sprintf("%.2f", gamma+qnorm(.975)*cal.fact.combined$se), "]"))
 ```
@@ -382,15 +395,16 @@ lp.calibrated <- c()
 for (i in 1:m){
   imputed.data.i <- mice::complete(imputed.data, i)
   predict.df <- as.matrix(cbind(rep(1, nrow(imputed.data.i)),
-                                imputed.data.i[, c("dPTH", "CorrCa24u")],
-                                as.numeric(imputed.data.i[, "BSKgezien"])-1))
+                                imputed.data.i[, "dPTH"],                    # dPTH
+                                as.numeric(imputed.data.i[, "BSKgezien"])-1, # BSKgezien
+                                imputed.data.i[, "CorrCa24u"]))              # CorrCa24u
   
   coef.calibrated.model.i <- c(cal.fact[i]*coef(final.model)[1]+cal.int[i],
                                cal.fact[i]*coef(final.model)[-1])
   lp.calibrated <- cbind(lp.calibrated, as.numeric(t(coef.calibrated.model.i) %*% t(predict.df)))
 }
 
-png(file=paste0(file.path, "Results/model.performance.calibrated.model.png"), 
+png(file=paste0(file.path, "Results/Figures/model.performance.calibrated.model.png"), 
     width=400, height=400, units="px")
 out.calibrated <- PredictionTools::val.prob.mi(lp.mi=lp.calibrated, g=3, dist=TRUE, 
                            y=as.numeric(work.data$Readmission)-1, lim=c(0, 1),
@@ -399,26 +413,27 @@ dev.off()
 ```
 # Save Table
 ```{r, eval=TRUE, warning=FALSE}
-names.coef <- c("Intercept", "dPTH", "CorrCa24u", # "dCorrCa",
-                "BSKgezien - No:Yes",
+names.coef.full <- c("Intercept", "dPTH", "BSKgezien - No:Yes", 
+                "CorrCa24u", "dCorrCa",
                 "Age_Years", "Sex - Male:Female",
                 "surgery_type - completion:total", "CHKD - Yes:No")
+names.coef.final <- c("Intercept", "dPTH", "BSKgezien - No:Yes", "CorrCa24u")
 calibrated.readmission.coef <- c(gamma*shrunk.intercept.final+gamma.extra, 
                                  gamma*shrunk.coef.final.model)
 calibrated.readmission.OR <- exp(calibrated.readmission.coef)
-OR.table <- data.frame(names=names.coef,
-                                OR.full=sprintf("%.2f", OR.full.model[names.coef]),
-                                CI.full=c(paste0("[", sprintf("%.2f", CI.full.model[names.coef, 1]), "; ", 
-                                               sprintf("%.2f", CI.full.model[names.coef, 2]), "]")),
-                                shrunk.OR.full=sprintf("%.2f", shrunk.OR.full.model[names.coef]),
-                                Chi.full=c("", sprintf("%.1f", an.full[-nrow(an.full), "Chi-Square"])),
-                                OR.final=c(sprintf("%.2f", OR.final.model), rep("", 4)),
-                                CI.final=c(paste0("[", sprintf("%.2f", CI.final.model[, 1]), "; ", 
-                                               sprintf("%.2f", CI.final.model[, 2]), "]"), rep("", 4)),
-                                shrunk.OR.final=c(sprintf("%.2f", shrunk.OR.final.model), rep("", 4)),
-                                Chi.final=c("", sprintf("%.1f", an.final[-nrow(an.final), "Chi-Square"]),
-                                            rep("", 4)),
-                                calibrated.readmission=c(sprintf("%.2f", calibrated.readmission.OR), rep("", 4)))
+OR.table <- data.frame(names=names.coef.full,
+              OR.full=sprintf("%.2f", OR.full.model[names.coef.full]),
+              CI.full=c(paste0("[", sprintf("%.2f", CI.full.model[names.coef.full, 1]), "; ", 
+                             sprintf("%.2f", CI.full.model[names.coef.full, 2]), "]")),
+              shrunk.OR.full=sprintf("%.2f", shrunk.OR.full.model[names.coef.full]),
+              Chi.full=c("", sprintf("%.1f", an.full[-nrow(an.full), "Chi-Square"])),
+              OR.final=c(sprintf("%.2f", OR.final.model[names.coef.final]), rep("", 5)),
+              CI.final=c(paste0("[", sprintf("%.2f", CI.final.model[names.coef.final, 1]), "; ", 
+                             sprintf("%.2f", CI.final.model[names.coef.final, 2]), "]"), rep("", 5)),
+              shrunk.OR.final=c(sprintf("%.2f", shrunk.OR.final.model[names.coef.final]), rep("", 5)),
+              Chi.final=c("", sprintf("%.1f", an.final[-nrow(an.final), "Chi-Square"]),
+                          rep("", 5)),
+              calibrated.readmission=c(sprintf("%.2f", calibrated.readmission.OR[names.coef.final]), rep("", 5)))
 Cindex.table <- c("C-index optimism-corrected",
                   sprintf("%.2f", out.full$cindex-optimism.C), 
                   paste0("[", sprintf("%.2f", out.full$cindex.lower-optimism.C), "; ", 
@@ -431,8 +446,8 @@ Cindex.table <- c("C-index optimism-corrected",
                   "",
                   "",
                   paste0(sprintf("%.2f", out.calibrated$cindex-optimism.C), 
-                         " [", sprintf("%.2f", out.final$cindex.lower-optimism.C), "; ", 
-                         sprintf("%.2f", out.final$cindex.upper-optimism.C), "]"))
+                         " [", sprintf("%.2f", out.calibrated$cindex.lower-optimism.C), "; ", 
+                         sprintf("%.2f", out.calibrated$cindex.upper-optimism.C), "]"))
 final.table <- rbind(OR.table, Cindex.table)
 openxlsx::write.xlsx(final.table,
             rowNames=FALSE,
