@@ -21,24 +21,24 @@ work.data$CorrCa24u <- work.data$Ca24u +((34-work.data$Albu24u)*0.016)
 work.data$dCorrCa <- ((work.data$CorrCaBaseline - work.data$CorrCa24u)/work.data$CorrCaBaseline*100)
 work.data$dCa <- ((work.data$BaseCa - work.data$Ca24u)/work.data$BaseCa*100)
 
-descr.table <- arsenal::tableby(Validatie1 ~ HypoP +
-                                  Readmission + 
-                                  BaselinePTH + 
+descr.table <- arsenal::tableby(Validatie1 ~ Age_Years +
+                                  Sex +
+                                  surgery_type + 
+                                  arsenal::includeNA(CHKD) +
+                                  arsenal::includeNA(BSKgezien) + 
+                                  BaselinePTH +
                                   PTH24u +
                                   dPTH + 
-                                  BaseCa + 
                                   Basealbu + 
-                                  CorrCaBaseline + 
-                                  Ca24u + 
                                   Albu24u + 
+                                  BaseCa + 
+                                  Ca24u + 
+                                  dCa + 
+                                  CorrCaBaseline + 
                                   CorrCa24u + 
                                   dCorrCa + 
-                                  dCa + 
-                                  Age_Years + 
-                                  Sex + 
-                                  surgery_type + 
-                                  arsenal::includeNA(BSKgezien) + 
-                                  arsenal::includeNA(CHKD), 
+                                  HypoP +
+                                  Readmission, 
   data=work.data, 
   total.pos="before",
   digits = 1,
