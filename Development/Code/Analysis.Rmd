@@ -29,7 +29,7 @@ source("Z:/Project Predict Hypoparathyroidism/Development/Code/propplot_functie.
 # Load data
 ```{r, eval=TRUE, echo=TRUE, message=FALSE, warning=FALSE}
 file.path <- "Z:/Project Predict Hypoparathyroidism/Development/"
-original.data <- utils::read.csv(paste0(file.path, "Data/Data.csv"), 
+original.data <- utils::read.csv(paste0(file.path, "Data/Data_v2.csv"), 
                  stringsAsFactors=TRUE,
                  header = T, sep = ";", dec = ".", 
                  na.strings = c("", " ", "NA", "999", 999, "999.00", 999.00, 
@@ -38,7 +38,8 @@ new.imputation <- FALSE
 
 # variable selection
 cvar <- c("Record_ID", "Readmission","HypoP", "surgery_type", "Sex", # "Indicatie", "Center", "Validatie"
-          "BSKgezien",  "CHKD", "BSKinPA", "PostPA", "PostOPCa", "Validatie1")
+          "BSKgezien",  "CHKD", "BSKinPA", "PostPA", "PostOPCa", "Validatie1",
+          "BSKreimp")
 nvar <- c("BaselinePTH", "PTH24u", "BaseCa", "Basealbu", "Ca24u", "Albu24u",
            "Age_Years")
 work.data <- original.data[c(cvar, nvar)]
@@ -112,6 +113,8 @@ mi_long$CorrCaBaseline <- mi_long$BaseCa +((34-mi_long$Basealbu)*0.016)
 mi_long$CorrCa24u <- mi_long$Ca24u +((34-mi_long$Albu24u)*0.016)
 mi_long$dCorrCa <- ((mi_long$CorrCaBaseline - mi_long$CorrCa24u)/mi_long$CorrCaBaseline*100)
 mi_long$dCa <- ((mi_long$BaseCa - mi_long$Ca24u)/mi_long$BaseCa*100)
+mi_long$Malignant <- ifelse(mi_long$PostPA=="Malignant", "Yes", "No")
+mi_long$Malignant <- as.factor(mi_long$Malignant)
 
 # imputed data into mice format
 imputed.data <- as.mids(mi_long)
@@ -132,14 +135,17 @@ form.full.model <- HypoP ~ dPTH +
   Age_Years + 
   Sex +
   surgery_type +
-  CHKD
+  CHKD + 
+  Malignant +
+  BSKreimp
 
 # fit using multiple imputation
 full.model <- Hmisc::fit.mult.impute(form.full.model, lrm, 
                                           xtrans=imputed.data,
                                           data=work.data,
                                           n.impute=m, pr=FALSE, fit.reps=TRUE, 
-                                          fitargs=list(y=TRUE, x=TRUE, se.fit=TRUE))
+                                          fitargs=list(y=TRUE, x=TRUE, 
+                                                       se.fit=TRUE))
 ```
 
 # Calculate optimism using bootstrap using full model and doing backward selection for each bootstrap
@@ -165,8 +171,15 @@ cat(" Original C          :", cindex.orig, "\n",
 # Backward selection
 ```{r, eval=TRUE, warning=FALSE}
 form.final.model <- HypoP ~ dPTH + 
-  BSKgezien +
-  CorrCa24u
+  BSKgezien + 
+  CorrCa24u  
+  #1 dCorrCa +
+  #3 Age_Years + 
+  #2 Sex +
+  #4 surgery_type +
+  #5 CHKD + 
+  #7 Malignant 
+  #6 BSKreimp
 
 # multiple imputation model
 final.model <- Hmisc::fit.mult.impute(form.final.model, lrm, 
@@ -174,6 +187,7 @@ final.model <- Hmisc::fit.mult.impute(form.final.model, lrm,
                                           data=work.data,
                                           n.impute=m, pr=FALSE, fit.reps=TRUE, 
                                           fitargs=list(y=TRUE, x=TRUE, se.fit=TRUE))
+anova(final.model)
 ```
 # Save results of full and final model
 ```{r, eval=TRUE}
@@ -203,8 +217,10 @@ for (model.type in model.types){
     summary.model <- summary(fitted.model, 
                          dPTH=c(0, 1),
                          CorrCa24u=c(0.2, 0.1),
-                         dCorrCa=c(2, 1),
-                         BSKgezien="Yes")[which(summary(fitted.model)[, "Type"]==1), ]
+                         dCorrCa=c(10, 0),
+                         BSKgezien="Yes", 
+                         Malignant="No")[which(summary(fitted.model)[, "Type"]==1), ]
+    print(summary.model)
   } else{
     summary.model <- summary(fitted.model, 
                          dPTH=c(0, 1),
@@ -416,10 +432,11 @@ dev.off()
 names.coef.full <- c("Intercept", "dPTH", "BSKgezien - No:Yes", 
                 "CorrCa24u", "dCorrCa",
                 "Age_Years", "Sex - Male:Female",
-                "surgery_type - completion:total", "CHKD - Yes:No")
+                "surgery_type - completion:total", "CHKD - Yes:No",
+                "Malignant - Yes:No", "BSKreimp - Yes:No")
 names.coef.final <- c("Intercept", "dPTH", "BSKgezien - No:Yes", "CorrCa24u")
 calibrated.readmission.coef <- c(gamma*shrunk.intercept.final+gamma.extra, 
-                                 gamma*shrunk.coef.final.model)
+                                 gamma*shrunk.intercept.final)
 calibrated.readmission.OR <- exp(calibrated.readmission.coef)
 OR.table <- data.frame(names=names.coef.full,
               OR.full=sprintf("%.2f", OR.full.model[names.coef.full]),
@@ -427,13 +444,13 @@ OR.table <- data.frame(names=names.coef.full,
                              sprintf("%.2f", CI.full.model[names.coef.full, 2]), "]")),
               shrunk.OR.full=sprintf("%.2f", shrunk.OR.full.model[names.coef.full]),
               Chi.full=c("", sprintf("%.1f", an.full[-nrow(an.full), "Chi-Square"])),
-              OR.final=c(sprintf("%.2f", OR.final.model[names.coef.final]), rep("", 5)),
+              OR.final=c(sprintf("%.2f", OR.final.model[names.coef.final]), rep("", 7)),
               CI.final=c(paste0("[", sprintf("%.2f", CI.final.model[names.coef.final, 1]), "; ", 
-                             sprintf("%.2f", CI.final.model[names.coef.final, 2]), "]"), rep("", 5)),
-              shrunk.OR.final=c(sprintf("%.2f", shrunk.OR.final.model[names.coef.final]), rep("", 5)),
+                             sprintf("%.2f", CI.final.model[names.coef.final, 2]), "]"), rep("", 7)),
+              shrunk.OR.final=c(sprintf("%.2f", shrunk.OR.final.model[names.coef.final]), rep("", 7)),
               Chi.final=c("", sprintf("%.1f", an.final[-nrow(an.final), "Chi-Square"]),
-                          rep("", 5)),
-              calibrated.readmission=c(sprintf("%.2f", calibrated.readmission.OR[names.coef.final]), rep("", 5)))
+                          rep("", 7)),
+              calibrated.readmission=c(sprintf("%.2f", calibrated.readmission.OR[names.coef.final]), rep("", 7)))
 Cindex.table <- c("C-index optimism-corrected",
                   sprintf("%.2f", out.full$cindex-optimism.C), 
                   paste0("[", sprintf("%.2f", out.full$cindex.lower-optimism.C), "; ", 

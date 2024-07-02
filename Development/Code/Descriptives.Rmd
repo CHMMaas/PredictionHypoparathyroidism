@@ -26,6 +26,8 @@ descr.table <- arsenal::tableby(Validatie1 ~ Age_Years +
                                   surgery_type + 
                                   arsenal::includeNA(CHKD) +
                                   arsenal::includeNA(BSKgezien) + 
+                                  arsenal::includeNA(PostPA) +
+                                  arsenal::includeNA(BSKreimp) +
                                   BaselinePTH +
                                   PTH24u +
                                   dPTH + 
@@ -68,6 +70,8 @@ my_labels <- list(HypoP = "Hypoparathyroidism",
   Sex = "Sex",
   surgery_type = "Surgery type", 
   BSKgezien = "BSK gezien",
+  PostPA = "Post PA",
+  BSKreimp = "BSK reimp",
   CHKD= "CHKD")
 ```
 
